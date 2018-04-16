@@ -1,4 +1,4 @@
-ARG FROM_FILE="3rd-party"
+ARG FROM_FILE="otherdeps"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
