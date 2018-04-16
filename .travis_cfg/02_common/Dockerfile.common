@@ -71,8 +71,7 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && 
         echo "cd" >> /home/$USERNAME/.bashrc
 
 # CUDA Path
-RUN echo "export PATH=/usr/local/cuda-$CUDA_VER/bin:\${PATH}" >> /home/$USERNAME/.bashrc
-RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda-$CUDA_VER/lib64:\${LD_LIBRARY_PATH}" >> /home/$USERNAME/.bashrc
+RUN echo "export LD_LIBRARY_PATH=/usr/local/x86_64-linux-gnu:\${LD_LIBRARY_PATH}" >> /home/$USERNAME/.bashrc
 
 # Change user
 USER autoware
