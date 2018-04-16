@@ -15,17 +15,18 @@ env:
   - MAKEFLAGS="-j 2"
   - GIT_BRANCH=`git branch | grep -v \*` ; GIT_BRANCH=`echo $GIT_BRANCH`
   matrix:
-  - ROS_DISTRO=indigo  OS_CODE=trusty OS_VER=14.04 CUDA_VER=8.0-devel
-  - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=8.0-devel
-  - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=9.0-devel
+  - ROS_DISTRO=indigo  OS_CODE=trusty OS_VER=14.04 CUDA_VER=8.0
+  - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=8.0
+  - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=9.0
 before_install:
 - travis_wait 30 docker pull ubuntu:$OS_CODE 1>/dev/null
-- travis_wait 30 docker pull "nvidia/cuda:$CUDA_VER-ubuntu$OS_VER" 1>/dev/null
+- travis_wait 30 docker pull "nvidia/cuda:$CUDA_VER-devel-ubuntu$OS_VER" 1>/dev/null
 install:
 - travis_wait 30 docker build -t init -f .travis_cfg/01_init/Dockerfile.init.$OS_CODE
-  --no-cache --build-arg FROM_FILE="nvidia/cuda:$CUDA_VER-ubuntu$OS_VER" .
+  --no-cache --build-arg FROM_FILE="nvidia/cuda:$CUDA_VER-devel-ubuntu$OS_VER" .
 - travis_wait 30 docker build -t common -f .travis_cfg/02_common/Dockerfile.common
-  --no-cache --build-arg FROM_FILE="init" --build-arg ROS_DISTRO="$ROS_DISTRO" .
+  --no-cache --build-arg FROM_FILE="init" --build-arg ROS_DISTRO="$ROS_DISTRO"
+  --build-arg CUDA_VER="$CUDA_VER" .
 - travis_wait 30 docker build -t rosdeps -f .travis_cfg/03_rosdeps/Dockerfile.rosdeps.$ROS_DISTRO
   --no-cache --build-arg FROM_FILE="common" .
 - travis_wait 30 docker build -t otherdeps -f .travis_cfg/04_otherdeps/Dockerfile.otherdeps.$OS_CODE

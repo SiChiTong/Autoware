@@ -3,6 +3,8 @@ FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
 ARG ROS_DISTRO="kinetic"
+ARG CUDA_VER="8.0"
+
 RUN export ROS_PARALLEL_JOBS="-j2 -l2"
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -67,6 +69,10 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && 
         echo "export QT_X11_NO_MITSHM=1" >> /home/$USERNAME/.bashrc && \
         # cd to home on login
         echo "cd" >> /home/$USERNAME/.bashrc
+
+# CUDA Path
+RUN echo "export PATH=/usr/local/cuda-$CUDA_VER/bin:\${PATH}" >> /home/$USERNAME/.bashrc
+RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda-$CUDA_VER/lib64:\${LD_LIBRARY_PATH}" >> /home/$USERNAME/.bashrc
 
 # Change user
 USER autoware
