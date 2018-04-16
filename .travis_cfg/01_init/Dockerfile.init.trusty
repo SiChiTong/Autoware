@@ -1,0 +1,15 @@
+ARG FROM_FILE="nvidia/cuda:8.0-devel-ubuntu14.04"
+FROM $FROM_FILE
+MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
+
+ENV DEBIAN_FRONTEND noninteractive
+
+# Update
+RUN apt-get update 1>/dev/null
+RUN apt-get install -y wget software-properties-common 1>/dev/null
+RUN wget http://packages.ros.org/ros.key -O - | apt-key add - 1>/dev/null
+RUN echo "deb http://packages.ros.org/ros/ubuntu trusty main" > /etc/apt/sources.list.d/ros-latest.list
+RUN apt-get update 1>/dev/null
+RUN add-apt-repository ppa:mosquitto-dev/mosquitto-ppa 1>/dev/null
+RUN apt-get update 1>/dev/null
+

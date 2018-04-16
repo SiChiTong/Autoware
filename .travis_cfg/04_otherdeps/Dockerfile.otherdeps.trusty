@@ -1,0 +1,37 @@
+ARG FROM_FILE="common"
+FROM $FROM_FILE
+MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
+
+ENV DEBIAN_FRONTEND noninteractive
+
+############
+##PT GREY FlyCaptureSDK
+############
+#download driver
+RUN sudo wget http://ertl.jp/~amonrroy/flycapture2-2.6.3.4-amd64-pkg.tgz \
+1>/dev/null
+RUN sudo tar -xvzf flycapture2-2.6.3.4-amd64-pkg.tgz \
+1>/dev/null
+
+##install dependencies
+RUN sudo apt-get install -y libraw1394-11 libgtk2.0-0 libgtkmm-2.4-dev libglademm-2.4-dev libgtkglextmm-x11-1.2-dev libusb-1.0-0 \
+1>/dev/null
+
+RUN cd flycapture2-2.6.3.4-amd64 && \
+    sudo dpkg -i libflycapture-2* && \
+    sudo dpkg -i libflycapturegui-2* && \
+    sudo dpkg -i libflycapture-c-2* && \
+    sudo dpkg -i libflycapturegui-c-2* && \
+    sudo dpkg -i libmultisync-2* && \
+    sudo dpkg -i flycap-2* && \
+    sudo dpkg -i flycapture-doc-2* && \
+    sudo dpkg -i updatorgui*
+
+#setup camera usb permissions
+ENV PGUDEVFILE /etc/udev/rules.d/40-pgr.rules
+RUN sudo groupadd -f pgrimaging && \
+    sudo usermod -a -G pgrimaging $USERNAME && \
+    sudo sh -c "echo 'SUBSYSTEM==\"usb\", ATTR{idVendor}==\"1e10\", MODE=\"0666\", GROUP=\"pgrimaging\" ' >> PGUDEVFILE" && \
+    sudo /etc/init.d/udev restart
+
+## End PT GREY

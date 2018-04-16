@@ -1,0 +1,8 @@
+ARG FROM_FILE="init"
+FROM $FROM_FILE
+MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN sudo apt-get install -y ros-indigo-sicktoolbox ros-indigo-sicktoolbox-wrapper ros-indigo-novatel-span-driver \
+1>/dev/null

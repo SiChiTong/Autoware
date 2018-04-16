@@ -1,0 +1,3 @@
+ARG FROM_FILE="common"
+FROM $FROM_FILE
+MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
