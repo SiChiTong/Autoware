@@ -92,3 +92,6 @@ RUN gconftool-2 --set "/apps/gnome-terminal/profiles/Default/background_color" -
 
 # Default CMD
 CMD ["/bin/bash"]
+
+# Reflect .bashrc
+RUN /bin/bash -c 'source /home/$USERNAME/.bashrc'
