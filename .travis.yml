@@ -25,7 +25,7 @@ install:
   --no-cache --build-arg FROM_FILE="ubuntu:$OS_CODE" .
 - travis_wait 30 docker build -t autoware -f .travis_cfg/02_common/Dockerfile.common
   --no-cache --build-arg FROM_FILE="autoware" --build-arg ROS_DISTRO="$ROS_DISTRO"
-  --build-arg CUDA_VER="$CUDA_VER" .
+  --build-arg CUDA_VER="$CUDA_VER" --build-arg OS_VER="$OS_VER" .
 - travis_wait 30 docker build -t autoware -f .travis_cfg/03_rosdeps/Dockerfile.rosdeps.$ROS_DISTRO
   --no-cache --build-arg FROM_FILE="autoware" .
 - travis_wait 30 docker build -t autoware -f .travis_cfg/04_otherdeps/Dockerfile.otherdeps.$OS_CODE
