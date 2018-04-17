@@ -1,9 +1,10 @@
-ARG FROM_FILE="rosdeps"
+ARG FROM_FILE="autoware"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
 ARG ROS_DISTRO="kinetic"
 ARG CUDA_VER="8.0"
+ARG OS_VER="16.04"
 
 RUN export ROS_PARALLEL_JOBS="-j2 -l2"
 
@@ -70,8 +71,19 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && 
         # cd to home on login
         echo "cd" >> /home/$USERNAME/.bashrc
 
-# CUDA Path
-RUN echo "export LD_LIBRARY_PATH=/usr/local/x86_64-linux-gnu:\${LD_LIBRARY_PATH}" >> /home/$USERNAME/.bashrc
+# CUDA
+RUN REPOS_DIR=`echo "ubuntu$OS_VER" | sed "s/\.//"`
+RUN CUDA_SFX=`echo "$CUDA_VER" | sed "s/\./\-/"`
+RUN apt-get purge -y cuda
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$REPOS_DIR/x86_64/
+RUN CUDA_DEV=`cat index.html | grep cuda-repo-ubuntu1604_8.0 | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-$REPOS_DIR_$CUDA_VER | grep -v href`
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$REPOS_DIR/x86_64/$CUDA_DEV
+RUN dpkg -i $CUDA_DEV
+RUN apt-get update
+RUN apt-get install --yes --force-yes cuda-$CUDA_SFX
+RUN "export PATH=/usr/local/cuda-$CUDA_VER/bin:\${PATH}" >> /home/$USERNAME/.bashrc
+RUN "export LD_LIBRARY_PATH=/usr/local/cuda-$CUDA_VER/lib64:\${LD_LIBRARY_PATH}" >> /home/$USERNAME/.bashrc
+
 
 # Change user
 USER autoware

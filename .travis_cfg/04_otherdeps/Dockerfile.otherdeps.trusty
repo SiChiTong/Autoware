@@ -1,4 +1,4 @@
-ARG FROM_FILE="common"
+ARG FROM_FILE="autoware"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 

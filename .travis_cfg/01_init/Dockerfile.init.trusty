@@ -1,4 +1,4 @@
-ARG FROM_FILE="nvidia/cuda:8.0-devel-ubuntu14.04"
+ARG FROM_FILE="ubuntu:trusty"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 

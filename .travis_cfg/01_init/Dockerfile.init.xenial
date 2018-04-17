@@ -1,4 +1,4 @@
-ARG FROM_FILE="nvidia/cuda:8.0-devel-ubuntu16.04"
+ARG FROM_FILE="ubuntu:xenial"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
