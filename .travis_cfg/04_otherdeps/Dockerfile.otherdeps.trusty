@@ -8,14 +8,12 @@ ENV DEBIAN_FRONTEND noninteractive
 ##PT GREY FlyCaptureSDK
 ############
 #download driver
-RUN sudo wget http://ertl.jp/~amonrroy/flycapture2-2.6.3.4-amd64-pkg.tgz \
-1>/dev/null
+RUN sudo wget -q http://ertl.jp/~amonrroy/flycapture2-2.6.3.4-amd64-pkg.tgz
 RUN sudo tar -xvzf flycapture2-2.6.3.4-amd64-pkg.tgz \
 1>/dev/null
 
 ##install dependencies
-RUN sudo apt-get install -y libraw1394-11 libgtk2.0-0 libgtkmm-2.4-dev libglademm-2.4-dev libgtkglextmm-x11-1.2-dev libusb-1.0-0 \
-1>/dev/null
+RUN sudo apt-get install -y -q libraw1394-11 libgtk2.0-0 libgtkmm-2.4-dev libglademm-2.4-dev libgtkglextmm-x11-1.2-dev libusb-1.0-0
 
 RUN cd flycapture2-2.6.3.4-amd64 && \
     sudo dpkg -i libflycapture-2* && \
