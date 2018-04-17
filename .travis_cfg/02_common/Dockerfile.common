@@ -72,10 +72,10 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && 
         echo "cd" >> /home/$USERNAME/.bashrc
 
 # CUDA
-RUN REPOS_DIR=`echo "ubuntu$OS_VER" | sed "s/\.//"`
-RUN CUDA_SFX=`echo "$CUDA_VER" | sed "s/\./\-/"`
+ENV REPOS_DIR=`echo "ubuntu$OS_VER" | sed "s/\.//"`
+ENV CUDA_SFX=`echo "$CUDA_VER" | sed "s/\./\-/"`
 RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$REPOS_DIR/x86_64/
-RUN CUDA_DEV=`cat index.html | grep cuda-repo-ubuntu1604_8.0 | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-$REPOS_DIR_$CUDA_VER | grep -v href`
+ENV CUDA_DEV=`cat index.html | grep cuda-repo-ubuntu1604_8.0 | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-$REPOS_DIR_$CUDA_VER | grep -v href`
 RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$REPOS_DIR/x86_64/$CUDA_DEV
 RUN dpkg -i $CUDA_DEV
 RUN apt-get update
