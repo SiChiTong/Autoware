@@ -1,0 +1,2130 @@
+diff --git a/README.md b/README.md
+index 56dfa60..d8769e1 100644
+--- a/README.md
++++ b/README.md
+@@ -1,41 +1,40 @@
+ # SSD: Single Shot MultiBox Detector
+ 
+ [![Build Status](https://travis-ci.org/weiliu89/caffe.svg?branch=ssd)](https://travis-ci.org/weiliu89/caffe)
+-[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+ 
+ By [Wei Liu](http://www.cs.unc.edu/~wliu/), [Dragomir Anguelov](https://www.linkedin.com/in/dragomiranguelov), [Dumitru Erhan](http://research.google.com/pubs/DumitruErhan.html), [Christian Szegedy](http://research.google.com/pubs/ChristianSzegedy.html), [Scott Reed](http://www-personal.umich.edu/~reedscot/), [Cheng-Yang Fu](http://www.cs.unc.edu/~cyfu/), [Alexander C. Berg](http://acberg.com).
+ 
+ ### Introduction
+ 
+-SSD is an unified framework for object detection with a single network. You can use the code to train/evaluate a network for object detection task. For more details, please refer to our [arXiv paper](http://arxiv.org/abs/1512.02325) and our [slide](http://www.cs.unc.edu/~wliu/papers/ssd_eccv2016_slide.pdf).
++SSD is an unified framework for object detection with a single network. You can use the code to train/evaluate a network for object detection task. For more details, please refer to our [arXiv paper](http://arxiv.org/abs/1512.02325).
+ 
+ <p align="center">
+ <img src="http://www.cs.unc.edu/~wliu/papers/ssd.png" alt="SSD Framework" width="600px">
+ </p>
+ 
+-| System | VOC2007 test *mAP* | **FPS** (Titan X) | Number of Boxes | Input resolution
+-|:-------|:-----:|:-------:|:-------:|:-------:|
+-| [Faster R-CNN (VGG16)](https://github.com/ShaoqingRen/faster_rcnn) | 73.2 | 7 | ~6000 | ~1000 x 600 |
+-| [YOLO (customized)](http://pjreddie.com/darknet/yolo/) | 63.4 | 45 | 98 | 448 x 448 |
+-| SSD300* (VGG16) | 77.2 | 46 | 8732 | 300 x 300 |
+-| SSD512* (VGG16) | **79.8** | 19 | 24564 | 512 x 512 |
++<center>
+ 
++| System | VOC2007 test *mAP* | **FPS** (Titan X) | Number of Boxes |
++|:-------|:-----:|:-------:|:-------:|
++| [Faster R-CNN (VGG16)](https://github.com/ShaoqingRen/faster_rcnn) | 73.2 | 7 | 300 |
++| [Faster R-CNN (ZF)](https://github.com/ShaoqingRen/faster_rcnn) | 62.1 | 17 | 300 |
++| [YOLO](http://pjreddie.com/darknet/yolo/) | 63.4 | 45 | 98 |
++| [Fast YOLO](http://pjreddie.com/darknet/yolo/) | 52.7 | 155 | 98 |
++| SSD300 (VGG16) | 72.1 | 58 | 7308 |
++| SSD300 (VGG16, cuDNN v5) | 72.1 | 72 | 7308 |
++| SSD500 (VGG16) | **75.1** | 23 | 20097 |
+ 
+-<p align="left">
+-<img src="http://www.cs.unc.edu/~wliu/papers/ssd_results.png" alt="SSD results on multiple datasets" width="800px">
+-</p>
+-
+-_Note: SSD300* and SSD512* are the latest models. Current code should reproduce these results._
++</center>
+ 
+ ### Citing SSD
+ 
+ Please cite SSD in your publications if it helps your research:
+ 
+-    @inproceedings{liu2016ssd,
+-      title = {{SSD}: Single Shot MultiBox Detector},
+-      author = {Liu, Wei and Anguelov, Dragomir and Erhan, Dumitru and Szegedy, Christian and Reed, Scott and Fu, Cheng-Yang and Berg, Alexander C.},
+-      booktitle = {ECCV},
+-      year = {2016}
++    @article{liu15ssd,
++      Title = {{SSD}: Single Shot MultiBox Detector},
++      Author = {Liu, Wei and Anguelov, Dragomir and Erhan, Dumitru and Szegedy, Christian and Reed, Scott and Fu, Cheng-Yang and Berg, Alexander C.},
++      Journal = {arXiv preprint arXiv:1512.02325},
++      Year = {2015}
+     }
+ 
+ ### Contents
+@@ -60,8 +59,12 @@ Please cite SSD in your publications if it helps your research:
+   # Make sure to include $CAFFE_ROOT/python to your PYTHONPATH.
+   make py
+   make test -j8
+-  # (Optional)
+   make runtest -j8
++  # If you have multiple GPUs installed in your machine, make runtest might fail. If so, try following:
++  export CUDA_VISIBLE_DEVICES=0; make runtest -j8
++  # If you have error: "Check failed: error == cudaSuccess (10 vs. 0)  invalid device ordinal",
++  # first make sure you have the specified GPUs, or try following if you have multiple GPUs:
++  unset CUDA_VISIBLE_DEVICES
+   ```
+ 
+ ### Preparation
+@@ -102,10 +105,10 @@ Please cite SSD in your publications if it helps your research:
+   #   - $CAFFE_ROOT/jobs/VGGNet/VOC0712/SSD_300x300/
+   # and save temporary evaluation results in:
+   #   - $HOME/data/VOCdevkit/results/VOC2007/SSD_300x300/
+-  # It should reach 77.* mAP at 120k iterations.
++  # It should reach 72.* mAP at 60k iterations.
+   python examples/ssd/ssd_pascal.py
+   ```
+-  If you don't have time to train your model, you can download a pre-trained model at [here](https://drive.google.com/open?id=0BzKzrI_SkD1_WVVTSmQxU0dVRzA).
++  If you don't have time to train your model, you can download a pre-trained model at [here](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_VOC0712_SSD_300x300.tar.gz).
+ 
+ 2. Evaluate the most recent snapshot.
+   ```Shell
+@@ -120,24 +123,14 @@ Please cite SSD in your publications if it helps your research:
+   ```
+   [Here](https://drive.google.com/file/d/0BzKzrI_SkD1_R09NcjM1eElLcWc/view) is a demo video of running a SSD500 model trained on [MSCOCO](http://mscoco.org) dataset.
+ 
+-4. Check out [`examples/ssd_detect.ipynb`](https://github.com/weiliu89/caffe/blob/ssd/examples/ssd_detect.ipynb) or [`examples/ssd/ssd_detect.cpp`](https://github.com/weiliu89/caffe/blob/ssd/examples/ssd/ssd_detect.cpp) on how to detect objects using a SSD model. Check out [`examples/ssd/plot_detections.py`](https://github.com/weiliu89/caffe/blob/ssd/examples/ssd/plot_detections.py) on how to plot detection results output by ssd_detect.cpp.
++4. Check out `examples/ssd_detect.ipynb` or `examples/ssd/ssd_detect.cpp` on how to detect objects using a SSD model.
+ 
+-5. To train on other dataset, please refer to data/OTHERDATASET for more details. We currently add support for COCO and ILSVRC2016. We recommend using [`examples/ssd.ipynb`](https://github.com/weiliu89/caffe/blob/ssd/examples/ssd_detect.ipynb) to check whether the new dataset is prepared correctly.
++5. To train on other dataset, please refer to data/OTHERDATASET for more details.
++We currently add support for MSCOCO and ILSVRC2016.
+ 
+ ### Models
+-We have provided the latest models that are trained from different datasets. To help reproduce the results in [Table 6](https://arxiv.org/pdf/1512.02325v4.pdf), most models contain a pretrained `.caffemodel` file, many `.prototxt` files, and python scripts.
+-
+-1. PASCAL VOC models:
+-   * 07+12: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_WVVTSmQxU0dVRzA), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_ZDIxVHBEcUNBb2s)
+-   * 07++12: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_WnR2T1BGVWlCZHM), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_MjFjNTlnempHNWs)
+-   * COCO<sup>[1]</sup>: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_NDlVeFJDc2tIU1k), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_TW4wTC14aDdCTDQ)
+-   * 07+12+COCO: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_UFpoU01yLS1SaG8), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_X3ZXQUUtM0xNeEk)
+-   * 07++12+COCO: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_TkFPTEQ1Z091SUE), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_NVVNdWdYNEh1WTA)
+-
+-2. COCO models:
+-   * trainval35k: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_dUY1Ml9GRTFpUWc), [SSD512*](https://drive.google.com/open?id=0BzKzrI_SkD1_dlJpZHJzOXd3MTg)
++1. Models trained on VOC0712: [SSD300](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_VOC0712_SSD_300x300.tar.gz), [SSD500](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_VOC0712_SSD_500x500.tar.gz)
+ 
+-3. ILSVRC models:
+-   * trainval1: [SSD300*](https://drive.google.com/open?id=0BzKzrI_SkD1_a2NKQ2d1d043VXM), [SSD500](https://drive.google.com/open?id=0BzKzrI_SkD1_X2ZCLVgwLTgzaTQ)
++2. Models trained on MSCOCO trainval35k: [SSD300](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_coco_SSD_300x300.tar.gz), [SSD500](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_coco_SSD_500x500.tar.gz)
+ 
+-<sup>[1]</sup>We use [`examples/convert_model.ipynb`](https://github.com/weiliu89/caffe/blob/ssd/examples/convert_model.ipynb) to extract a VOC model from a pretrained COCO model.
++3. Models trained on ILSVRC2015 trainval1: [SSD300](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_ilsvrc15_SSD_300x300.tar.gz), [SSD500](http://www.cs.unc.edu/~wliu/projects/SSD/models_VGGNet_ilsvrc15_SSD_500x500.tar.gz) (46.4 mAP on val2)
+diff --git a/data/ILSVRC2016/README.md b/data/ILSVRC2016/README.md
+index c4e5a6f..bb21330 100644
+--- a/data/ILSVRC2016/README.md
++++ b/data/ILSVRC2016/README.md
+@@ -9,9 +9,6 @@ If you choose to use ILSVRC2015 DET dataset, here are a few noticeable steps bef
+ 
+ 2. You should download the [val1/val2 split](http://www.cs.unc.edu/~wliu/projects/SSD/ILSVRC2015_DET_val1_val2.tar.gz), courtesy of [Ross Girshick](http://people.eecs.berkeley.edu/~rbg), and put it in `$ILSVRC_ROOT/ImageSets/DET`.
+ 
+-### Remove an invalid file
+-Find the invalid image file `Data/DET/val/ILSVRC2013_val_00004542.JPEG`, and remove it.
+-
+ ### Create the LMDB file.
+ After you have downloaded the dataset, we can create the lmdb files.
+ 
+diff --git a/docs/install_apt_debian.md b/docs/install_apt_debian.md
+new file mode 100644
+index 0000000..0a6a3b9
+--- /dev/null
++++ b/docs/install_apt_debian.md
+@@ -0,0 +1,163 @@
++---
++title: "Installation: Debian"
++---
++
++# Debian Installation
++
++Caffe packages are available for several Debian versions, as shown in the
++following chart:
++
++```
++Your Distro     |  CPU_ONLY  |  CUDA  | Codename
++----------------+------------+--------+-------------------
++Debian/oldstable|     ✘      |   ✘    | Jessie (8.0)
++Debian/stable   |     ✔      |   ✔    | Stretch (9.0)
++Debian/testing  |     ✔      |   ✔    | Buster
++Debian/unstable |     ✔      |   ✔    | Buster
++```
++
++* `✘ ` You should take a look at [Ubuntu installation instruction](install_apt.html).
++
++* `✔ ` You can install caffe with a single command line following this guide.
++
++* [Package status of CPU-only version](https://tracker.debian.org/pkg/caffe)
++
++* [Package status of CUDA version](https://tracker.debian.org/pkg/caffe-contrib)
++
++Last update: 2017-07-08
++
++## Binary installation with APT
++
++Apart from the installation methods based on source, Debian users can install
++pre-compiled Caffe packages from the official archive with APT.
++
++Make sure that your `/etc/apt/sources.list` contains `contrib` and `non-free`
++sections if you want to install the CUDA version, for instance:
++
++```
++deb http://ftp2.cn.debian.org/debian sid main contrib non-free
++```
++
++Then we update APT cache and directly install Caffe. Note, the cpu version and
++the cuda version cannot coexist.
++
++```
++$ sudo apt update
++$ sudo apt install [ caffe-cpu | caffe-cuda ]
++$ caffe                                              # command line interface working
++$ python3 -c 'import caffe; print(caffe.__path__)'   # python3 interface working
++```
++
++These Caffe packages should work for you out of box. However, the CUDA version
++may break if your NVIDIA driver and CUDA toolkit are not installed with APT.
++
++#### Customizing caffe packages
++
++Some users may need to customize the Caffe package. The way to customize
++the package is beyond this guide. Here is only a brief guide of producing
++the customized `.deb` packages. 
++
++Make sure that there is a `dec-src` source in your `/etc/apt/sources.list`,
++for instance:
++
++```
++deb http://ftp2.cn.debian.org/debian sid main contrib non-free
++deb-src http://ftp2.cn.debian.org/debian sid main contrib non-free
++```
++
++Then we build caffe deb files with the following commands:
++
++```
++$ sudo apt update
++$ sudo apt install build-essential debhelper devscripts  # standard package building tools
++$ sudo apt build-dep [ caffe-cpu | caffe-cuda ]          # the most elegant way to pull caffe build dependencies
++$ apt source [ caffe-cpu | caffe-cuda ]                  # download the source tarball and extract
++$ cd caffe-XXXX
++[ ... optional, customizing caffe code/build ... ]
++$ dch --local "Modified XXX"                             # bump package version and write changelog
++$ debuild -B -j4                                         # build caffe with 4 parallel jobs (similar to make -j4)
++[ ... building ...]
++$ debc                                                   # optional, if you want to check the package contents
++$ sudo debi                                              # optional, install the generated packages
++$ ls ../                                                 # optional, you will see the resulting packages
++```
++
++It is a BUG if the package failed to build without any change.
++The changelog will be installed at e.g. `/usr/share/doc/caffe-cpu/changelog.Debian.gz`.
++
++## Source installation
++
++Source installation under Debian/unstable and Debian/testing is similar to that of Ubuntu, but
++here is a more elegant way to pull caffe build dependencies:
++
++```
++$ sudo apt build-dep [ caffe-cpu | caffe-cuda ]
++```
++
++Note, this requires a `deb-src` entry in your `/etc/apt/sources.list`.
++
++#### Compiler Combinations
++
++Some users may find their favorate compiler doesn't work with CUDA.
++
++```
++CXX compiler |  CUDA 7.5  |  CUDA 8.0  |  CUDA 9.0  |
++-------------+------------+------------+------------+
++GCC-8        |     ?      |     ?      |     ?      |
++GCC-7        |     ?      |     ?      |     ?      |
++GCC-6        |     ✘      |     ✘      |     ✔      |
++GCC-5        |     ✔ [1]  |     ✔      |     ✔      |
++-------------+------------+------------+------------+
++CLANG-4.0    |     ?      |     ?      |     ?      |
++CLANG-3.9    |     ✘      |     ✘      |     ✔      |
++CLANG-3.8    |     ?      |     ✔      |     ✔      |
++```
++
++`[1]` CUDA 7.5 's `host_config.h` must be patched before working with GCC-5.
++
++`[2]` CUDA 9.0: https://devblogs.nvidia.com/parallelforall/cuda-9-features-revealed/
++
++BTW, please forget the GCC-4.X series, since its `libstdc++` ABI is not compatible with GCC-5's.
++You may encounter failure linking GCC-4.X object files against GCC-5 libraries.
++(See https://wiki.debian.org/GCC5 )
++
++## Notes
++
++* Consider re-compiling OpenBLAS locally with optimization flags for sake of
++performance. This is highly recommended for any kind of production use, including
++academic research.
++
++* If you are installing `caffe-cuda`, APT will automatically pull some of the
++CUDA packages and the nvidia driver packages. Please be careful if you have
++manually installed or hacked nvidia driver or CUDA toolkit or any other
++related stuff, because in this case APT may fail.
++
++* Additionally, a manpage (`man caffe`) and a bash complementation script
++(`caffe <TAB><TAB>`, `caffe train <TAB><TAB>`) are provided.
++Both of the two files are still not merged into caffe master.
++
++* The python interface is Python 3 version: `python3-caffe-{cpu,cuda}`.
++No plan to support python2.
++
++* If you encountered any problem related to the packaging system (e.g. failed to install `caffe-*`),
++please report bug to Debian via Debian's bug tracking system. See https://www.debian.org/Bugs/ .
++Patches and suggestions are also welcome.
++
++## FAQ
++
++* where is caffe-cudnn?
++
++CUDNN library seems not redistributable currently. If you really want the
++caffe-cudnn deb packages, the workaround is to install cudnn by yourself,
++and hack the packaging scripts, then build your customized package.
++
++* I installed the CPU version. How can I switch to the CUDA version?
++
++`sudo apt install caffe-cuda`, apt's dependency resolver is smart enough to deal with this.
++
++* Where are the examples, the models and other documentation stuff?
++
++```
++$ sudo apt install caffe-doc
++$ dpkg -L caffe-doc
++```
+diff --git a/docs/installation.md b/docs/installation.md
+index b824880..3254be3 100644
+--- a/docs/installation.md
++++ b/docs/installation.md
+@@ -41,14 +41,14 @@ Optional dependencies:
+ 
+ * [OpenCV](http://opencv.org/) >= 2.4 including 3.0
+ * IO libraries: `lmdb`, `leveldb` (note: leveldb requires `snappy`)
+-* cuDNN for GPU acceleration (v6)
++* cuDNN for GPU acceleration (v5)
+ 
+ Pycaffe and Matcaffe interfaces have their own natural needs.
+ 
+ * For Python Caffe:  `Python 2.7` or `Python 3.3+`, `numpy (>= 1.7)`, boost-provided `boost.python`
+ * For MATLAB Caffe: MATLAB with the `mex` compiler.
+ 
+-**cuDNN Caffe**: for fastest operation Caffe is accelerated by drop-in integration of [NVIDIA cuDNN](https://developer.nvidia.com/cudnn). To speed up your Caffe models, install cuDNN then uncomment the `USE_CUDNN := 1` flag in `Makefile.config` when installing Caffe. Acceleration is automatic. The current version is cuDNN v6; older versions are supported in older Caffe.
++**cuDNN Caffe**: for fastest operation Caffe is accelerated by drop-in integration of [NVIDIA cuDNN](https://developer.nvidia.com/cudnn). To speed up your Caffe models, install cuDNN then uncomment the `USE_CUDNN := 1` flag in `Makefile.config` when installing Caffe. Acceleration is automatic. The current version is cuDNN v5; older versions are supported in older Caffe.
+ 
+ **CPU-only Caffe**: for cold-brewed CPU-only Caffe uncomment the `CPU_ONLY := 1` flag in `Makefile.config` to configure and build Caffe without CUDA. This is helpful for cloud or cluster deployment.
+ 
+diff --git a/docs/tutorial/layers/absval.md b/docs/tutorial/layers/absval.md
+new file mode 100644
+index 0000000..220c411
+--- /dev/null
++++ b/docs/tutorial/layers/absval.md
+@@ -0,0 +1,22 @@
++---
++title: Absolute Value Layer
++---
++
++# Absolute Value Layer
++
++* Layer type: `AbsVal`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1AbsValLayer.html)
++* Header: [`./include/caffe/layers/absval_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/absval_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/absval_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/absval_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/absval_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/absval_layer.cu)
++
++* Sample
++
++      layer {
++        name: "layer"
++        bottom: "in"
++        top: "out"
++        type: "AbsVal"
++      }
++
++The `AbsVal` layer computes the output as abs(x) for each input element x.
+diff --git a/docs/tutorial/layers/accuracy.md b/docs/tutorial/layers/accuracy.md
+new file mode 100644
+index 0000000..80293b1
+--- /dev/null
++++ b/docs/tutorial/layers/accuracy.md
+@@ -0,0 +1,20 @@
++---
++title: Accuracy and Top-k
++---
++
++# Accuracy and Top-k
++
++`Accuracy` scores the output as the accuracy of output with respect to target -- it is not actually a loss and has no backward step.
++
++* Layer type: `Accuracy`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1AccuracyLayer.html)
++* Header: [`./include/caffe/layers/accuracy_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/accuracy_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/accuracy_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/accuracy_layer.cpp)
++
++## Parameters
++* Parameters (`AccuracyParameter accuracy_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/AccuracyParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/argmax.md b/docs/tutorial/layers/argmax.md
+new file mode 100644
+index 0000000..9eb8b77
+--- /dev/null
++++ b/docs/tutorial/layers/argmax.md
+@@ -0,0 +1,18 @@
++---
++title: ArgMax Layer
++---
++
++# ArgMax Layer
++
++* Layer type: `ArgMax`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ArgMaxLayer.html)
++* Header: [`./include/caffe/layers/argmax_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/argmax_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/argmax_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/argmax_layer.cpp)
++
++## Parameters
++* Parameters (`ArgMaxParameter argmax_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/ArgMaxParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/batchnorm.md b/docs/tutorial/layers/batchnorm.md
+new file mode 100644
+index 0000000..a5be5ce
+--- /dev/null
++++ b/docs/tutorial/layers/batchnorm.md
+@@ -0,0 +1,20 @@
++---
++title: Batch Norm Layer
++---
++
++# Batch Norm Layer
++
++* Layer type: `BatchNorm`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1BatchNormLayer.html)
++* Header: [`./include/caffe/layers/batch_norm_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/batch_norm_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/batch_norm_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/batch_norm_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/batch_norm_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/batch_norm_layer.cu)
++
++## Parameters
++
++* Parameters (`BatchNormParameter batch_norm_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/BatchNormParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/batchreindex.md b/docs/tutorial/layers/batchreindex.md
+new file mode 100644
+index 0000000..21b36c3
+--- /dev/null
++++ b/docs/tutorial/layers/batchreindex.md
+@@ -0,0 +1,16 @@
++---
++title: Batch Reindex Layer
++---
++
++# Batch Reindex Layer
++
++* Layer type: `BatchReindex`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1BatchReindexLayer.html)
++* Header: [`./include/caffe/layers/batch_reindex_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/batch_reindex_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/batch_reindex_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/batch_reindex_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/batch_reindex_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/batch_reindex_layer.cu)
++
++
++## Parameters
++
++No parameters.
+diff --git a/docs/tutorial/layers/bias.md b/docs/tutorial/layers/bias.md
+new file mode 100644
+index 0000000..d3a00c2
+--- /dev/null
++++ b/docs/tutorial/layers/bias.md
+@@ -0,0 +1,19 @@
++---
++title: Bias Layer
++---
++
++# Bias Layer
++
++* Layer type: `Bias`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1BiasLayer.html)
++* Header: [`./include/caffe/layers/bias_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/bias_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/bias_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/bias_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/bias_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/bias_layer.cu)
++
++## Parameters
++* Parameters (`BiasParameter bias_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/BiasParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/bnll.md b/docs/tutorial/layers/bnll.md
+new file mode 100644
+index 0000000..2b68b79
+--- /dev/null
++++ b/docs/tutorial/layers/bnll.md
+@@ -0,0 +1,25 @@
++---
++title: BNLL Layer
++---
++
++# BNLL Layer
++
++* Layer type: `BNLL`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1BNLLLayer.html)
++* Header: [`./include/caffe/layers/bnll_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/bnll_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/bnll_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/bnll_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/bnll_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/bnll_layer.cu)
++
++The `BNLL` (binomial normal log likelihood) layer computes the output as log(1 + exp(x)) for each input element x.
++
++## Parameters
++No parameters.
++
++## Sample
++
++      layer {
++        name: "layer"
++        bottom: "in"
++        top: "out"
++        type: BNLL
++      }
+diff --git a/docs/tutorial/layers/concat.md b/docs/tutorial/layers/concat.md
+new file mode 100644
+index 0000000..c7b2539
+--- /dev/null
++++ b/docs/tutorial/layers/concat.md
+@@ -0,0 +1,40 @@
++---
++title: Concat Layer
++---
++
++# Concat Layer
++
++* Layer type: `Concat`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ConcatLayer.html)
++* Header: [`./include/caffe/layers/concat_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/concat_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/concat_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/concat_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/concat_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/concat_layer.cu)
++* Input
++    - `n_i * c_i * h * w` for each input blob i from 1 to K.
++* Output
++    - if `axis = 0`: `(n_1 + n_2 + ... + n_K) * c_1 * h * w`, and all input `c_i` should be the same.
++    - if `axis = 1`: `n_1 * (c_1 + c_2 + ... + c_K) * h * w`, and all input `n_i` should be the same.
++* Sample
++
++      layer {
++        name: "concat"
++        bottom: "in1"
++        bottom: "in2"
++        top: "out"
++        type: "Concat"
++        concat_param {
++          axis: 1
++        }
++      }
++
++The `Concat` layer is a utility layer that concatenates its multiple input blobs to one single output blob.
++
++## Parameters
++* Parameters (`ConcatParameter concat_param`)
++    - Optional
++        - `axis` [default 1]: 0 for concatenation along num and 1 for channels.
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/ConcatParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/contrastiveloss.md b/docs/tutorial/layers/contrastiveloss.md
+new file mode 100644
+index 0000000..bb1859d
+--- /dev/null
++++ b/docs/tutorial/layers/contrastiveloss.md
+@@ -0,0 +1,20 @@
++---
++title: Contrastive Loss Layer
++---
++
++# Contrastive Loss Layer
++
++* Layer type: `ContrastiveLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ContrastiveLossLayer.html)
++* Header: [`./include/caffe/layers/contrastive_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/contrastive_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/contrastive_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/contrastive_loss_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/contrastive_loss_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/contrastive_loss_layer.cu)
++
++## Parameters
++
++* Parameters (`ContrastiveLossParameter contrastive_loss_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/ContrastiveLossParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/convolution.md b/docs/tutorial/layers/convolution.md
+new file mode 100644
+index 0000000..cc9f4fd
+--- /dev/null
++++ b/docs/tutorial/layers/convolution.md
+@@ -0,0 +1,63 @@
++---
++title: Convolution Layer
++---
++
++# Convolution Layer
++
++* Layer type: `Convolution`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ConvolutionLayer.html)
++* Header: [`./include/caffe/layers/conv_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/conv_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/conv_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/conv_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/conv_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/conv_layer.cu)
++* Input
++    - `n * c_i * h_i * w_i`
++* Output
++    - `n * c_o * h_o * w_o`, where `h_o = (h_i + 2 * pad_h - kernel_h) / stride_h + 1` and `w_o` likewise.
++
++The `Convolution` layer convolves the input image with a set of learnable filters, each producing one feature map in the output image.
++
++## Sample
++
++Sample (as seen in [`./models/bvlc_reference_caffenet/train_val.prototxt`](https://github.com/BVLC/caffe/blob/master/models/bvlc_reference_caffenet/train_val.prototxt)):
++
++      layer {
++        name: "conv1"
++        type: "Convolution"
++        bottom: "data"
++        top: "conv1"
++        # learning rate and decay multipliers for the filters
++        param { lr_mult: 1 decay_mult: 1 }
++        # learning rate and decay multipliers for the biases
++        param { lr_mult: 2 decay_mult: 0 }
++        convolution_param {
++          num_output: 96     # learn 96 filters
++          kernel_size: 11    # each filter is 11x11
++          stride: 4          # step 4 pixels between each filter application
++          weight_filler {
++            type: "gaussian" # initialize the filters from a Gaussian
++            std: 0.01        # distribution with stdev 0.01 (default mean: 0)
++          }
++          bias_filler {
++            type: "constant" # initialize the biases to zero (0)
++            value: 0
++          }
++        }
++      }
++
++## Parameters
++* Parameters (`ConvolutionParameter convolution_param`)
++    - Required
++        - `num_output` (`c_o`): the number of filters
++        - `kernel_size` (or `kernel_h` and `kernel_w`): specifies height and width of each filter
++    - Strongly Recommended
++        - `weight_filler` [default `type: 'constant' value: 0`]
++    - Optional
++        - `bias_term` [default `true`]: specifies whether to learn and apply a set of additive biases to the filter outputs
++        - `pad` (or `pad_h` and `pad_w`) [default 0]: specifies the number of pixels to (implicitly) add to each side of the input
++        - `stride` (or `stride_h` and `stride_w`) [default 1]: specifies the intervals at which to apply the filters to the input
++        - `group` (g) [default 1]: If g > 1, we restrict the connectivity of each filter to a subset of the input. Specifically, the input and output channels are separated into g groups, and the $$i$$th output group channels will be only connected to the $$i$$th input group channels.
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/ConvolutionParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/crop.md b/docs/tutorial/layers/crop.md
+new file mode 100644
+index 0000000..28f9124
+--- /dev/null
++++ b/docs/tutorial/layers/crop.md
+@@ -0,0 +1,20 @@
++---
++title: Crop Layer
++---
++
++# Crop Layer
++
++* Layer type: `Crop`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1CropLayer.html)
++* Header: [`./include/caffe/layers/crop_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/crop_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/crop_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/crop_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/crop_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/crop_layer.cu)
++
++## Parameters
++
++* Parameters (`CropParameter crop_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/CropParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/data.md b/docs/tutorial/layers/data.md
+new file mode 100644
+index 0000000..58e0dca
+--- /dev/null
++++ b/docs/tutorial/layers/data.md
+@@ -0,0 +1,29 @@
++---
++title: Database Layer
++---
++
++# Database Layer
++
++* Layer type: `Data`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1DataLayer.html)
++* Header: [`./include/caffe/layers/data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/data_layer.cpp)
++
++
++## Parameters
++
++* Parameters (`DataParameter data_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/DataParameter.txt %}
++{% endhighlight %}
++
++* Parameters
++    - Required
++        - `source`: the name of the directory containing the database
++        - `batch_size`: the number of inputs to process at one time
++    - Optional
++        - `rand_skip`: skip up to this number of inputs at the beginning; useful for asynchronous sgd
++        - `backend` [default `LEVELDB`]: choose whether to use a `LEVELDB` or `LMDB`
++
+diff --git a/docs/tutorial/layers/deconvolution.md b/docs/tutorial/layers/deconvolution.md
+new file mode 100644
+index 0000000..2eff967
+--- /dev/null
++++ b/docs/tutorial/layers/deconvolution.md
+@@ -0,0 +1,22 @@
++---
++title: Deconvolution Layer
++---
++
++# Deconvolution Layer
++
++* Layer type: `Deconvolution`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1DeconvolutionLayer.html)
++* Header: [`./include/caffe/layers/deconv_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/deconv_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/deconv_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/deconv_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/deconv_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/deconv_layer.cu)
++
++## Parameters
++
++Uses the same parameters as the Convolution layer.
++
++* Parameters (`ConvolutionParameter convolution_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/ConvolutionParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/dropout.md b/docs/tutorial/layers/dropout.md
+new file mode 100644
+index 0000000..d8c6f95
+--- /dev/null
++++ b/docs/tutorial/layers/dropout.md
+@@ -0,0 +1,20 @@
++---
++title: Dropout Layer
++---
++
++# Dropout Layer
++
++* Layer type: `Dropout`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1DropoutLayer.html)
++* Header: [`./include/caffe/layers/dropout_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/dropout_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/dropout_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/dropout_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/dropout_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/dropout_layer.cu)
++
++## Parameters
++
++* Parameters (`DropoutParameter dropout_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/DropoutParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/dummydata.md b/docs/tutorial/layers/dummydata.md
+new file mode 100644
+index 0000000..d069f9c
+--- /dev/null
++++ b/docs/tutorial/layers/dummydata.md
+@@ -0,0 +1,20 @@
++---
++title: Dummy Data Layer
++---
++
++# Dummy Data Layer
++
++* Layer type: `DummyData`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1DummyDataLayer.html)
++* Header: [`./include/caffe/layers/dummy_data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/dummy_data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/dummy_data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/dummy_data_layer.cpp)
++
++
++## Parameters
++
++* Parameters (`DummyDataParameter dummy_data_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/DummyDataParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/eltwise.md b/docs/tutorial/layers/eltwise.md
+new file mode 100644
+index 0000000..70fe791
+--- /dev/null
++++ b/docs/tutorial/layers/eltwise.md
+@@ -0,0 +1,20 @@
++---
++title: Eltwise Layer
++---
++
++# Eltwise Layer
++
++* Layer type: `Eltwise`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1EltwiseLayer.html)
++* Header: [`./include/caffe/layers/eltwise_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/eltwise_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/eltwise_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/eltwise_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/eltwise_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/eltwise_layer.cu)
++
++## Parameters
++
++* Parameters (`EltwiseParameter eltwise_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/EltwiseParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/elu.md b/docs/tutorial/layers/elu.md
+new file mode 100644
+index 0000000..11db0f0
+--- /dev/null
++++ b/docs/tutorial/layers/elu.md
+@@ -0,0 +1,25 @@
++---
++title: ELU Layer
++---
++
++# ELU Layer
++
++* Layer type: `ELU`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ELULayer.html)
++* Header: [`./include/caffe/layers/elu_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/elu_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/elu_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/elu_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/elu_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/elu_layer.cu)
++
++## References
++
++* Clevert, Djork-Arne, Thomas Unterthiner, and Sepp Hochreiter.
++  "Fast and Accurate Deep Network Learning by Exponential Linear Units (ELUs)" [arXiv:1511.07289](https://arxiv.org/abs/1511.07289). (2015).
++
++## Parameters
++
++* Parameters (`ELUParameter elu_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ELUParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/embed.md b/docs/tutorial/layers/embed.md
+new file mode 100644
+index 0000000..271636d
+--- /dev/null
++++ b/docs/tutorial/layers/embed.md
+@@ -0,0 +1,20 @@
++---
++title: Embed Layer
++---
++
++# Embed Layer
++
++* Layer type: `Embed`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1EmbedLayer.html)
++* Header: [`./include/caffe/layers/embed_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/embed_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/embed_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/embed_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/embed_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/embed_layer.cu)
++
++## Parameters
++
++* Parameters (`EmbedParameter embed_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/EmbedParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/euclideanloss.md b/docs/tutorial/layers/euclideanloss.md
+new file mode 100644
+index 0000000..c1b7208
+--- /dev/null
++++ b/docs/tutorial/layers/euclideanloss.md
+@@ -0,0 +1,16 @@
++---
++title: Euclidean Loss Layer
++---
++# Sum-of-Squares / Euclidean Loss Layer
++
++* Layer type: `EuclideanLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1EuclideanLossLayer.html)
++* Header: [`./include/caffe/layers/euclidean_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/euclidean_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/euclidean_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/euclidean_loss_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/euclidean_loss_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/euclidean_loss_layer.cu)
++
++The Euclidean loss layer computes the sum of squares of differences of its two inputs, $$\frac 1 {2N} \sum_{i=1}^N \| x^1_i - x^2_i \|_2^2$$.
++
++## Parameters
++
++Does not take any parameters.
+diff --git a/docs/tutorial/layers/exp.md b/docs/tutorial/layers/exp.md
+new file mode 100644
+index 0000000..ef2500e
+--- /dev/null
++++ b/docs/tutorial/layers/exp.md
+@@ -0,0 +1,24 @@
++---
++title: Exponential Layer
++---
++
++# Exponential Layer
++
++* Layer type: `Exp`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ExpLayer.html)
++* Header: [`./include/caffe/layers/exp_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/exp_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/exp_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/exp_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/exp_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/exp_layer.cu)
++
++## Parameters
++
++* Parameters (`Parameter exp_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ExpParameter.txt %}
++{% endhighlight %}
++
++## See also
++
++* [Power layer](power.html)
+diff --git a/docs/tutorial/layers/filter.md b/docs/tutorial/layers/filter.md
+new file mode 100644
+index 0000000..aeda9ee
+--- /dev/null
++++ b/docs/tutorial/layers/filter.md
+@@ -0,0 +1,15 @@
++---
++title: Filter Layer
++---
++
++# Filter Layer
++
++* Layer type: `Filter`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1FilterLayer.html)
++* Header: [`./include/caffe/layers/filter_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/filter_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/filter_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/filter_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/filter_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/filter_layer.cu)
++
++## Parameters
++
++Does not take any parameters.
+diff --git a/docs/tutorial/layers/flatten.md b/docs/tutorial/layers/flatten.md
+new file mode 100644
+index 0000000..ecf0826
+--- /dev/null
++++ b/docs/tutorial/layers/flatten.md
+@@ -0,0 +1,21 @@
++---
++title: Flatten Layer
++---
++
++# Flatten Layer
++
++* Layer type: `Flatten`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1FlattenLayer.html)
++* Header: [`./include/caffe/layers/flatten_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/flatten_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/flatten_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/flatten_layer.cpp)
++
++The `Flatten` layer is a utility layer that flattens an input of shape `n * c * h * w` to a simple vector output of shape `n * (c*h*w)`.
++
++## Parameters
++
++* Parameters (`FlattenParameter flatten_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/FlattenParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/hdf5data.md b/docs/tutorial/layers/hdf5data.md
+new file mode 100644
+index 0000000..d6b7ea2
+--- /dev/null
++++ b/docs/tutorial/layers/hdf5data.md
+@@ -0,0 +1,20 @@
++---
++title: HDF5 Data Layer
++---
++
++# HDF5 Data Layer
++
++* Layer type: `HDF5Data`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1HDF5DataLayer.html)
++* Header: [`./include/caffe/layers/hdf5_data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/hdf5_data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/hdf5_data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/hdf5_data_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/hdf5_data_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/hdf5_data_layer.cu)
++
++## Parameters
++
++* Parameters (`HDF5DataParameter hdf5_data_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/HDF5DataParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/hdf5output.md b/docs/tutorial/layers/hdf5output.md
+new file mode 100644
+index 0000000..cfbe4dd
+--- /dev/null
++++ b/docs/tutorial/layers/hdf5output.md
+@@ -0,0 +1,25 @@
++---
++title: HDF5 Output Layer
++---
++
++# HDF5 Output Layer
++
++* Layer type: `HDF5Output`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1HDF5OutputLayer.html)
++* Header: [`./include/caffe/layers/hdf5_output_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/hdf5_output_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/hdf5_output_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/hdf5_output_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/hdf5_output_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/hdf5_output_layer.cu)
++
++The HDF5 output layer performs the opposite function of the other layers in this section: it writes its input blobs to disk.
++
++## Parameters
++
++* Parameters (`HDF5OutputParameter hdf5_output_param`)
++    - Required
++        - `file_name`: name of file to write to
++
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/HDF5OutputParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/hingeloss.md b/docs/tutorial/layers/hingeloss.md
+new file mode 100644
+index 0000000..ef4fd95
+--- /dev/null
++++ b/docs/tutorial/layers/hingeloss.md
+@@ -0,0 +1,19 @@
++---
++title: Hinge Loss Layer
++---
++
++# Hinge (L1, L2) Loss Layer
++
++* Layer type: `HingeLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1HingeLossLayer.html)
++* Header: [`./include/caffe/layers/hinge_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/hinge_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/hinge_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/hinge_loss_layer.cpp)
++
++## Parameters
++
++* Parameters (`HingeLossParameter hinge_loss_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/HingeLossParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/im2col.md b/docs/tutorial/layers/im2col.md
+new file mode 100644
+index 0000000..0badc1c
+--- /dev/null
++++ b/docs/tutorial/layers/im2col.md
+@@ -0,0 +1,16 @@
++---
++title: Im2col Layer
++---
++
++# im2col
++
++* File type: `Im2col`
++* Header: [`./include/caffe/layers/im2col_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/im2col_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/im2col_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/im2col_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/im2col_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/im2col_layer.cu)
++
++`Im2col` is a helper for doing the image-to-column transformation that you most
++likely do not need to know about. This is used in Caffe's original convolution
++to do matrix multiplication by laying out all patches into a matrix.
++
++
+diff --git a/docs/tutorial/layers/imagedata.md b/docs/tutorial/layers/imagedata.md
+new file mode 100644
+index 0000000..82c8a60
+--- /dev/null
++++ b/docs/tutorial/layers/imagedata.md
+@@ -0,0 +1,27 @@
++---
++title: ImageData Layer
++---
++
++# ImageData Layer
++
++* Layer type: `ImageData`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ImageDataLayer.html)
++* Header: [`./include/caffe/layers/image_data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/image_data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/image_data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/image_data_layer.cpp)
++
++## Parameters
++
++* Parameters (`ImageDataParameter image_data_parameter`)
++    - Required
++        - `source`: name of a text file, with each line giving an image filename and label
++        - `batch_size`: number of images to batch together
++    - Optional
++        - `rand_skip`
++        - `shuffle` [default false]
++        - `new_height`, `new_width`: if provided, resize all images to this size
++
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ImageDataParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/infogainloss.md b/docs/tutorial/layers/infogainloss.md
+new file mode 100644
+index 0000000..b3b690d
+--- /dev/null
++++ b/docs/tutorial/layers/infogainloss.md
+@@ -0,0 +1,23 @@
++---
++title: Infogain Loss Layer
++---
++
++# Infogain Loss Layer
++
++* Layer type: `InfogainLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1InfogainLossLayer.html)
++* Header: [`./include/caffe/layers/infogain_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/infogain_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/infogain_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/infogain_loss_layer.cpp)
++
++A generalization of [MultinomialLogisticLossLayer](multinomiallogisticloss.html) that takes an "information gain" (infogain) matrix specifying the "value" of all label pairs.
++
++Equivalent to the [MultinomialLogisticLossLayer](multinomiallogisticloss.html) if the infogain matrix is the identity.
++
++## Parameters
++
++* Parameters (`Parameter infogain_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/InfogainLossParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/innerproduct.md b/docs/tutorial/layers/innerproduct.md
+new file mode 100644
+index 0000000..98b9bea
+--- /dev/null
++++ b/docs/tutorial/layers/innerproduct.md
+@@ -0,0 +1,59 @@
++---
++title: Inner Product / Fully Connected Layer
++---
++
++# Inner Product / Fully Connected Layer
++
++* Layer type: `InnerProduct`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1InnerProductLayer.html)
++* Header: [`./include/caffe/layers/inner_product_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/inner_product_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/inner_product_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/inner_product_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/inner_product_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/inner_product_layer.cu)
++
++* Input
++    - `n * c_i * h_i * w_i`
++* Output
++    - `n * c_o * 1 * 1`
++* Sample
++
++      layer {
++        name: "fc8"
++        type: "InnerProduct"
++        # learning rate and decay multipliers for the weights
++        param { lr_mult: 1 decay_mult: 1 }
++        # learning rate and decay multipliers for the biases
++        param { lr_mult: 2 decay_mult: 0 }
++        inner_product_param {
++          num_output: 1000
++          weight_filler {
++            type: "gaussian"
++            std: 0.01
++          }
++          bias_filler {
++            type: "constant"
++            value: 0
++          }
++        }
++        bottom: "fc7"
++        top: "fc8"
++      }
++
++The `InnerProduct` layer (also usually referred to as the fully connected layer) treats the input as a simple vector and produces an output in the form of a single vector (with the blob's height and width set to 1).
++
++
++## Parameters
++
++* Parameters (`InnerProductParameter inner_product_param`)
++    - Required
++        - `num_output` (`c_o`): the number of filters
++    - Strongly recommended
++        - `weight_filler` [default `type: 'constant' value: 0`]
++    - Optional
++        - `bias_filler` [default `type: 'constant' value: 0`]
++        - `bias_term` [default `true`]: specifies whether to learn and apply a set of additive biases to the filter outputs
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/InnerProductParameter.txt %}
++{% endhighlight %}
++ 
+diff --git a/docs/tutorial/layers/input.md b/docs/tutorial/layers/input.md
+new file mode 100644
+index 0000000..b74c35d
+--- /dev/null
++++ b/docs/tutorial/layers/input.md
+@@ -0,0 +1,19 @@
++---
++title: Input Layer
++---
++
++# Input Layer
++
++* Layer type: `Input`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1InputLayer.html)
++* Header: [`./include/caffe/layers/input_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/input_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/input_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/input_layer.cpp)
++
++## Parameters
++
++* Parameters (`InputParameter input_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto)):
++
++{% highlight Protobuf %}
++{% include proto/InputParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/log.md b/docs/tutorial/layers/log.md
+new file mode 100644
+index 0000000..df52037
+--- /dev/null
++++ b/docs/tutorial/layers/log.md
+@@ -0,0 +1,20 @@
++---
++title: Log Layer
++---
++
++# Log Layer
++
++* Layer type: `Log`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1LogLayer.html)
++* Header: [`./include/caffe/layers/log_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/log_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/log_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/log_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/log_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/log_layer.cu)
++
++## Parameters
++
++* Parameters (`Parameter log_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/LogParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/lrn.md b/docs/tutorial/layers/lrn.md
+new file mode 100644
+index 0000000..f5e4829
+--- /dev/null
++++ b/docs/tutorial/layers/lrn.md
+@@ -0,0 +1,28 @@
++---
++title: Local Response Normalization (LRN)
++---
++
++# Local Response Normalization (LRN)
++
++* Layer type: `LRN`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1LRNLayer.html)
++* Header: [`./include/caffe/layers/lrn_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/lrn_layer.hpp)
++* CPU Implementation: [`./src/caffe/layers/lrn_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/lrn_layer.cpp)
++* CUDA GPU Implementation: [`./src/caffe/layers/lrn_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/lrn_layer.cu)
++* Parameters (`LRNParameter lrn_param`)
++    - Optional
++        - `local_size` [default 5]: the number of channels to sum over (for cross channel LRN) or the side length of the square region to sum over (for within channel LRN)
++        - `alpha` [default 1]: the scaling parameter (see below)
++        - `beta` [default 5]: the exponent (see below)
++        - `norm_region` [default `ACROSS_CHANNELS`]: whether to sum over adjacent channels (`ACROSS_CHANNELS`) or nearby spatial locations (`WITHIN_CHANNEL`)
++
++The local response normalization layer performs a kind of "lateral inhibition" by normalizing over local input regions. In `ACROSS_CHANNELS` mode, the local regions extend across nearby channels, but have no spatial extent (i.e., they have shape `local_size x 1 x 1`). In `WITHIN_CHANNEL` mode, the local regions extend spatially, but are in separate channels (i.e., they have shape `1 x local_size x local_size`). Each input value is divided by $$(1 + (\alpha/n) \sum_i x_i^2)^\beta$$, where $$n$$ is the size of each local region, and the sum is taken over the region centered at that value (zero padding is added where necessary).
++
++## Parameters
++
++* Parameters (`LRNParameter lrn_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/LRNParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/lstm.md b/docs/tutorial/layers/lstm.md
+new file mode 100644
+index 0000000..8e4095e
+--- /dev/null
++++ b/docs/tutorial/layers/lstm.md
+@@ -0,0 +1,21 @@
++---
++title: LSTM Layer
++---
++
++# LSTM Layer
++
++* Layer type: `LSTM`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1LSTMLayer.html)
++* Header: [`./include/caffe/layers/lstm_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/lstm_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/lstm_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/lstm_layer.cpp)
++* CPU implementation (helper): [`./src/caffe/layers/lstm_unit_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/lstm_unit_layer.cpp)
++* CUDA GPU implementation (helper): [`./src/caffe/layers/lstm_unit_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/lstm_unit_layer.cu)
++
++## Parameters
++
++* Parameters (`Parameter recurrent_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/RecurrentParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/memorydata.md b/docs/tutorial/layers/memorydata.md
+new file mode 100644
+index 0000000..afce4a2
+--- /dev/null
++++ b/docs/tutorial/layers/memorydata.md
+@@ -0,0 +1,25 @@
++---
++title: Memory Data Layer
++---
++
++# Memory Data Layer
++
++* Layer type: `MemoryData`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1MemoryDataLayer.html)
++* Header: [`./include/caffe/layers/memory_data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/memory_data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/memory_data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/memory_data_layer.cpp)
++
++The memory data layer reads data directly from memory, without copying it. In order to use it, one must call `MemoryDataLayer::Reset` (from C++) or `Net.set_input_arrays` (from Python) in order to specify a source of contiguous data (as 4D row major array), which is read one batch-sized chunk at a time.
++
++# Parameters
++
++* Parameters (`MemoryDataParameter memory_data_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/MemoryDataParameter.txt %}
++{% endhighlight %}
++
++* Parameters
++    - Required
++        - `batch_size`, `channels`, `height`, `width`: specify the size of input chunks to read from memory
+diff --git a/docs/tutorial/layers/multinomiallogisticloss.md b/docs/tutorial/layers/multinomiallogisticloss.md
+new file mode 100644
+index 0000000..5eab74a
+--- /dev/null
++++ b/docs/tutorial/layers/multinomiallogisticloss.md
+@@ -0,0 +1,19 @@
++---
++title: Multinomial Logistic Loss Layer
++---
++
++# Multinomial Logistic Loss Layer
++
++* Layer type: `MultinomialLogisticLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1MultinomialLogisticLossLayer.html)
++* Header: [`./include/caffe/layers/multinomial_logistic_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/multinomial_logistic_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/multinomial_logistic_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/multinomial_logistic_loss_layer.cpp)
++
++## Parameters
++
++* Parameters (`LossParameter loss_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/LossParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/mvn.md b/docs/tutorial/layers/mvn.md
+new file mode 100644
+index 0000000..08e4488
+--- /dev/null
++++ b/docs/tutorial/layers/mvn.md
+@@ -0,0 +1,20 @@
++---
++title: Mean-Variance Normalization (MVN) Layer
++---
++
++# Mean-Variance Normalization (MVN) Layer
++
++* Layer type: `MVN`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1MVNLayer.html)
++* Header: [`./include/caffe/layers/mvn_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/mvn_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/mvn_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/mvn_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/mvn_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/mvn_layer.cu)
++
++## Parameters
++
++* Parameters (`MVNParameter mvn_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/MVNParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/parameter.md b/docs/tutorial/layers/parameter.md
+new file mode 100644
+index 0000000..b7e85ec
+--- /dev/null
++++ b/docs/tutorial/layers/parameter.md
+@@ -0,0 +1,21 @@
++---
++title: Parameter Layer
++---
++
++# Parameter Layer
++
++* Layer type: `Parameter`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ParameterLayer.html)
++* Header: [`./include/caffe/layers/parameter_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/parameter_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/parameter_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/parameter_layer.cpp)
++
++See [https://github.com/BVLC/caffe/pull/2079](https://github.com/BVLC/caffe/pull/2079).
++
++## Parameters
++
++* Parameters (`ParameterParameter parameter_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ParameterParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/pooling.md b/docs/tutorial/layers/pooling.md
+new file mode 100644
+index 0000000..12669ee
+--- /dev/null
++++ b/docs/tutorial/layers/pooling.md
+@@ -0,0 +1,47 @@
++---
++title: Pooling Layer
++---
++# Pooling
++
++* Layer type: `Pooling`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1PoolingLayer.html)
++* Header: [`./include/caffe/layers/pooling_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/pooling_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/pooling_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/pooling_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/pooling_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/pooling_layer.cu)
++
++* Input
++    - `n * c * h_i * w_i`
++* Output
++    - `n * c * h_o * w_o`, where h_o and w_o are computed in the same way as convolution.
++
++## Parameters
++
++* Parameters (`PoolingParameter pooling_param`)
++    - Required
++        - `kernel_size` (or `kernel_h` and `kernel_w`): specifies height and width of each filter
++    - Optional
++        - `pool` [default MAX]: the pooling method. Currently MAX, AVE, or STOCHASTIC
++        - `pad` (or `pad_h` and `pad_w`) [default 0]: specifies the number of pixels to (implicitly) add to each side of the input
++        - `stride` (or `stride_h` and `stride_w`) [default 1]: specifies the intervals at which to apply the filters to the input
++
++
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/PoolingParameter.txt %}
++{% endhighlight %}
++
++## Sample
++* Sample (as seen in [`./models/bvlc_reference_caffenet/train_val.prototxt`](https://github.com/BVLC/caffe/blob/master/models/bvlc_reference_caffenet/train_val.prototxt))
++
++      layer {
++        name: "pool1"
++        type: "Pooling"
++        bottom: "conv1"
++        top: "pool1"
++        pooling_param {
++          pool: MAX
++          kernel_size: 3 # pool over a 3x3 region
++          stride: 2      # step two pixels (in the bottom blob) between pooling regions
++        }
++      }
+diff --git a/docs/tutorial/layers/power.md b/docs/tutorial/layers/power.md
+new file mode 100644
+index 0000000..d661752
+--- /dev/null
++++ b/docs/tutorial/layers/power.md
+@@ -0,0 +1,46 @@
++---
++title: Power Layer
++---
++
++# Power Layer
++
++* Layer type: `Power`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1PowerLayer.html)
++* Header: [`./include/caffe/layers/power_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/power_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/power_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/power_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/power_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/power_layer.cu)
++
++The `Power` layer computes the output as (shift + scale * x) ^ power for each input element x.
++
++## Parameters
++* Parameters (`PowerParameter power_param`)
++    - Optional
++        - `power` [default 1]
++        - `scale` [default 1]
++        - `shift` [default 0]
++
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/PowerParameter.txt %}
++{% endhighlight %}
++ 
++ 
++ 
++## Sample
++
++      layer {
++        name: "layer"
++        bottom: "in"
++        top: "out"
++        type: "Power"
++        power_param {
++          power: 1
++          scale: 1
++          shift: 0
++        }
++      }
++
++## See also
++
++* [Exponential layer](exp.html)
+diff --git a/docs/tutorial/layers/prelu.md b/docs/tutorial/layers/prelu.md
+new file mode 100644
+index 0000000..e7b7b44
+--- /dev/null
++++ b/docs/tutorial/layers/prelu.md
+@@ -0,0 +1,20 @@
++---
++title: PReLU Layer
++---
++
++# PReLU Layer
++
++* Layer type: `PReLU`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1PReLULayer.html)
++* Header: [`./include/caffe/layers/prelu_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/prelu_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/prelu_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/prelu_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/prelu_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/prelu_layer.cu)
++
++## Parameters
++
++* Parameters (`PReLUParameter prelu_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/PReLUParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/python.md b/docs/tutorial/layers/python.md
+new file mode 100644
+index 0000000..2e30b3a
+--- /dev/null
++++ b/docs/tutorial/layers/python.md
+@@ -0,0 +1,27 @@
++---
++title: Python Layer
++---
++
++# Python Layer
++
++* Layer type: `Python`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1PythonLayer.html)
++* Header: [`./include/caffe/layers/python_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/python_layer.hpp)
++
++The Python layer allows users to add customized layers without modifying the Caffe core code.
++
++## Parameters
++
++* Parameters (`PythonParameter python_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/PythonParameter.txt %}
++{% endhighlight %}
++
++## Examples and tutorials
++
++* Simple Euclidean loss example
++** [Python code](https://github.com/BVLC/caffe/blob/master/examples/pycaffe/layers/pyloss.py)
++** [Prototxt](https://github.com/BVLC/caffe/blob/master/examples/pycaffe/linreg.prototxt)
++* [Tutorial for writing Python layers with DIGITS](https://github.com/NVIDIA/DIGITS/tree/master/examples/python-layer)
+diff --git a/docs/tutorial/layers/recurrent.md b/docs/tutorial/layers/recurrent.md
+new file mode 100644
+index 0000000..a882b72
+--- /dev/null
++++ b/docs/tutorial/layers/recurrent.md
+@@ -0,0 +1,20 @@
++---
++title: Recurrent Layer
++---
++
++# Recurrent Layer
++
++* Layer type: `Recurrent`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1RecurrentLayer.html)
++* Header: [`./include/caffe/layers/recurrent_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/recurrent_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/recurrent_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/recurrent_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/recurrent_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/recurrent_layer.cu)
++
++## Parameters
++
++* Parameters (`RecurrentParameter recurrent_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/RecurrentParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/reduction.md b/docs/tutorial/layers/reduction.md
+new file mode 100644
+index 0000000..db55414
+--- /dev/null
++++ b/docs/tutorial/layers/reduction.md
+@@ -0,0 +1,20 @@
++---
++title: Reduction Layer
++---
++
++# Reduction Layer
++
++* Layer type: `Reduction`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ReductionLayer.html)
++* Header: [`./include/caffe/layers/reduction_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/reduction_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/reduction_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/reduction_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/reduction_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/reduction_layer.cu)
++
++## Parameters
++
++* Parameters (`ReductionParameter reduction_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ReductionParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/relu.md b/docs/tutorial/layers/relu.md
+new file mode 100644
+index 0000000..01aab0a
+--- /dev/null
++++ b/docs/tutorial/layers/relu.md
+@@ -0,0 +1,32 @@
++---
++title: ReLU / Rectified-Linear and Leaky-ReLU Layer
++---
++
++# ReLU / Rectified-Linear and Leaky-ReLU Layer
++
++* Layer type: `ReLU`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ReLULayer.html)
++* Header: [`./include/caffe/layers/relu_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/relu_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/relu_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/relu_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/relu_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/relu_layer.cu)
++* Sample (as seen in [`./models/bvlc_reference_caffenet/train_val.prototxt`](https://github.com/BVLC/caffe/blob/master/models/bvlc_reference_caffenet/train_val.prototxt))
++
++      layer {
++        name: "relu1"
++        type: "ReLU"
++        bottom: "conv1"
++        top: "conv1"
++      }
++
++Given an input value x, The `ReLU` layer computes the output as x if x > 0 and negative_slope * x if x <= 0. When the negative slope parameter is not set, it is equivalent to the standard ReLU function of taking max(x, 0). It also supports in-place computation, meaning that the bottom and the top blob could be the same to preserve memory consumption.
++
++## Parameters
++
++* Parameters (`ReLUParameter relu_param`)
++    - Optional
++        - `negative_slope` [default 0]: specifies whether to leak the negative part by multiplying it with the slope value rather than setting it to 0.
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ReLUParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/reshape.md b/docs/tutorial/layers/reshape.md
+new file mode 100644
+index 0000000..92d23f2
+--- /dev/null
++++ b/docs/tutorial/layers/reshape.md
+@@ -0,0 +1,51 @@
++---
++title: Reshape Layer
++---
++
++# Reshape Layer
++* Layer type: `Reshape`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ReshapeLayer.html)
++* Header: [`./include/caffe/layers/reshape_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/reshape_layer.hpp)
++* Implementation: [`./src/caffe/layers/reshape_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/reshape_layer.cpp)
++
++* Input
++    - a single blob with arbitrary dimensions
++* Output
++    - the same blob, with modified dimensions, as specified by `reshape_param`
++
++* Sample
++
++        layer {
++          name: "reshape"
++          type: "Reshape"
++          bottom: "input"
++          top: "output"
++          reshape_param {
++            shape {
++              dim: 0  # copy the dimension from below
++              dim: 2
++              dim: 3
++              dim: -1 # infer it from the other dimensions
++            }
++          }
++        }
++
++The `Reshape` layer can be used to change the dimensions of its input, without changing its data. Just like the `Flatten` layer, only the dimensions are changed; no data is copied in the process.
++
++Output dimensions are specified by the `ReshapeParam` proto. Positive numbers are used directly, setting the corresponding dimension of the output blob. In addition, two special values are accepted for any of the target dimension values:
++
++* **0** means "copy the respective dimension of the bottom layer". That is, if the bottom has 2 as its 1st dimension, the top will have 2 as its 1st dimension as well, given `dim: 0` as the 1st target dimension.
++* **-1** stands for "infer this from the other dimensions". This behavior is similar to that of -1 in *numpy*'s or `[]` for *MATLAB*'s reshape: this dimension is calculated to keep the overall element count the same as in the bottom layer. At most one -1 can be used in a reshape operation.
++
++As another example, specifying `reshape_param { shape { dim: 0 dim: -1 } }` makes the layer behave in exactly the same way as the `Flatten` layer.
++ 
++## Parameters
++
++* Parameters (`ReshapeParameter reshape_param`)
++    - Optional: (also see detailed description below)
++        - `shape`
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ReshapeParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/rnn.md b/docs/tutorial/layers/rnn.md
+new file mode 100644
+index 0000000..b6fcf47
+--- /dev/null
++++ b/docs/tutorial/layers/rnn.md
+@@ -0,0 +1,19 @@
++---
++title: RNN Layer
++---
++
++# RNN Layer
++
++* Layer type: `RNN`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1RNNLayer.html)
++* Header: [`./include/caffe/layers/rnn_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/rnn_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/rnn_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/rnn_layer.cpp)
++
++## Parameters
++
++* Parameters (`RecurrentParameter recurrent_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/RecurrentParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/scale.md b/docs/tutorial/layers/scale.md
+new file mode 100644
+index 0000000..0e27549
+--- /dev/null
++++ b/docs/tutorial/layers/scale.md
+@@ -0,0 +1,20 @@
++---
++title: Scale Layer
++---
++
++# Scale Layer
++
++* Layer type: `Scale`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1ScaleLayer.html)
++* Header: [`./include/caffe/layers/scale_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/scale_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/scale_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/scale_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/scale_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/scale_layer.cu)
++
++## Parameters
++
++* Parameters (`ScaleParameter scale_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ScaleParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/sigmoid.md b/docs/tutorial/layers/sigmoid.md
+new file mode 100644
+index 0000000..f18ac4b
+--- /dev/null
++++ b/docs/tutorial/layers/sigmoid.md
+@@ -0,0 +1,30 @@
++---
++title: Sigmoid Layer
++---
++
++# Sigmoid Layer
++
++* Layer type: `Sigmoid`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SigmoidLayer.html)
++* Header: [`./include/caffe/layers/sigmoid_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/sigmoid_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/sigmoid_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/sigmoid_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/sigmoid_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/sigmoid_layer.cu)
++* Example (from [`./examples/mnist/mnist_autoencoder.prototxt`](https://github.com/BVLC/caffe/blob/master/examples/mnist/mnist_autoencoder.prototxt)):
++
++      layer {
++        name: "encode1neuron"
++        bottom: "encode1"
++        top: "encode1neuron"
++        type: "Sigmoid"
++      }
++
++The `Sigmoid` layer computes `sigmoid(x)` for each element `x` in the bottom blob.
++
++## Parameters
++
++* Parameters (`SigmoidParameter sigmoid_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/SigmoidParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/sigmoidcrossentropyloss.md b/docs/tutorial/layers/sigmoidcrossentropyloss.md
+new file mode 100644
+index 0000000..a6e42ca
+--- /dev/null
++++ b/docs/tutorial/layers/sigmoidcrossentropyloss.md
+@@ -0,0 +1,13 @@
++---
++title: Sigmoid Cross-Entropy Loss Layer
++---
++
++# Sigmoid Cross-Entropy Loss Layer
++
++* Layer type: `SigmoidCrossEntropyLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SigmoidCrossEntropyLossLayer.html)
++* Header: [`./include/caffe/layers/sigmoid_cross_entropy_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/sigmoid_cross_entropy_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/sigmoid_cross_entropy_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/sigmoid_cross_entropy_loss_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/sigmoid_cross_entropy_loss_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/sigmoid_cross_entropy_loss_layer.cu)
++
++To-do.
+diff --git a/docs/tutorial/layers/silence.md b/docs/tutorial/layers/silence.md
+new file mode 100644
+index 0000000..8b4579a
+--- /dev/null
++++ b/docs/tutorial/layers/silence.md
+@@ -0,0 +1,17 @@
++---
++title: Silence Layer
++---
++
++# Silence Layer
++
++* Layer type: `Silence`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SilenceLayer.html)
++* Header: [`./include/caffe/layers/silence_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/silence_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/silence_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/silence_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/silence_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/silence_layer.cu)
++
++Silences a blob, so that it is not printed.
++
++## Parameters
++
++No parameters.
+diff --git a/docs/tutorial/layers/slice.md b/docs/tutorial/layers/slice.md
+new file mode 100644
+index 0000000..a492f1e
+--- /dev/null
++++ b/docs/tutorial/layers/slice.md
+@@ -0,0 +1,42 @@
++---
++title: Slice Layer
++---
++
++# Slice Layer
++
++* Layer type: `Slice`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SliceLayer.html)
++* Header: [`./include/caffe/layers/slice_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/slice_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/slice_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/slice_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/slice_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/slice_layer.cu)
++
++The `Slice` layer is a utility layer that slices an input layer to multiple output layers along a given dimension (currently num or channel only) with given slice indices.
++
++* Sample
++
++      layer {
++        name: "slicer_label"
++        type: "Slice"
++        bottom: "label"
++        ## Example of label with a shape N x 3 x 1 x 1
++        top: "label1"
++        top: "label2"
++        top: "label3"
++        slice_param {
++          axis: 1
++          slice_point: 1
++          slice_point: 2
++        }
++      }
++
++`axis` indicates the target axis; `slice_point` indicates indexes in the selected dimension (the number of indices must be equal to the number of top blobs minus one).
++
++## Parameters
++
++* Parameters (`SliceParameter slice_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/SliceParameter.txt %}
++{% endhighlight %}
++
+diff --git a/docs/tutorial/layers/softmax.md b/docs/tutorial/layers/softmax.md
+new file mode 100644
+index 0000000..e5d5342
+--- /dev/null
++++ b/docs/tutorial/layers/softmax.md
+@@ -0,0 +1,24 @@
++---
++title: Softmax Layer
++---
++
++# Softmax Layer
++
++* Layer type: `Softmax`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SoftmaxLayer.html)
++* Header: [`./include/caffe/layers/softmax_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/softmax_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/softmax_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/softmax_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/softmax_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/softmax_layer.cu)
++
++## Parameters
++
++* Parameters (`SoftmaxParameter softmax_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/SoftmaxParameter.txt %}
++{% endhighlight %}
++
++## See also
++
++* [Softmax loss layer](softmaxwithloss.html)
+diff --git a/docs/tutorial/layers/softmaxwithloss.md b/docs/tutorial/layers/softmaxwithloss.md
+new file mode 100644
+index 0000000..d9a6774
+--- /dev/null
++++ b/docs/tutorial/layers/softmaxwithloss.md
+@@ -0,0 +1,33 @@
++---
++title: Softmax with Loss Layer
++---
++
++# Softmax with Loss Layer
++
++* Layer type: `SoftmaxWithLoss`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SoftmaxWithLossLayer.html)
++* Header: [`./include/caffe/layers/softmax_loss_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/softmax_loss_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/softmax_loss_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/softmax_loss_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/softmax_loss_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/softmax_loss_layer.cu)
++
++The softmax loss layer computes the multinomial logistic loss of the softmax of its inputs. It's conceptually identical to a softmax layer followed by a multinomial logistic loss layer, but provides a more numerically stable gradient.
++
++## Parameters
++
++* Parameters (`SoftmaxParameter softmax_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/SoftmaxParameter.txt %}
++{% endhighlight %}
++
++* Parameters (`LossParameter loss_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/LossParameter.txt %}
++{% endhighlight %}
++
++## See also
++
++* [Softmax layer](softmax.html)
+diff --git a/docs/tutorial/layers/split.md b/docs/tutorial/layers/split.md
+new file mode 100644
+index 0000000..4fb71d1
+--- /dev/null
++++ b/docs/tutorial/layers/split.md
+@@ -0,0 +1,17 @@
++---
++title: Split Layer
++---
++
++# Split Layer
++
++* Layer type: `Split`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SplitLayer.html)
++* Header: [`./include/caffe/layers/split_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/split_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/split_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/split_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/split_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/split_layer.cu)
++
++The `Split` layer is a utility layer that splits an input blob to multiple output blobs. This is used when a blob is fed into multiple output layers.
++
++## Parameters
++
++Does not take any parameters.
+diff --git a/docs/tutorial/layers/spp.md b/docs/tutorial/layers/spp.md
+new file mode 100644
+index 0000000..26e5862
+--- /dev/null
++++ b/docs/tutorial/layers/spp.md
+@@ -0,0 +1,20 @@
++---
++title: Spatial Pyramid Pooling Layer
++---
++
++# Spatial Pyramid Pooling Layer
++
++* Layer type: `SPP`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1SPPLayer.html)
++* Header: [`./include/caffe/layers/spp_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/spp_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/spp_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/spp_layer.cpp)
++
++
++## Parameters
++
++* Parameters (`SPPParameter spp_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/SPPParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/tanh.md b/docs/tutorial/layers/tanh.md
+new file mode 100644
+index 0000000..3606345
+--- /dev/null
++++ b/docs/tutorial/layers/tanh.md
+@@ -0,0 +1,18 @@
++---
++title: TanH Layer
++---
++
++# TanH Layer
++
++* Header: [`./include/caffe/layers/tanh_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/tanh_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/tanh_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/tanh_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/tanh_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/tanh_layer.cu)
++
++## Parameters
++
++* Parameters (`TanHParameter tanh_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/TanHParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/threshold.md b/docs/tutorial/layers/threshold.md
+new file mode 100644
+index 0000000..819e9e6
+--- /dev/null
++++ b/docs/tutorial/layers/threshold.md
+@@ -0,0 +1,18 @@
++---
++title: Threshold Layer
++---
++
++# Threshold Layer
++
++* Header: [`./include/caffe/layers/threshold_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/threshold_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/threshold_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/threshold_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/threshold_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/threshold_layer.cu)
++
++## Parameters
++
++* Parameters (`ThresholdParameter threshold_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/ThresholdParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/tile.md b/docs/tutorial/layers/tile.md
+new file mode 100644
+index 0000000..ea03aaa
+--- /dev/null
++++ b/docs/tutorial/layers/tile.md
+@@ -0,0 +1,20 @@
++---
++title: Tile Layer
++---
++
++# Tile Layer
++
++* Layer type: `Tile`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1TileLayer.html)
++* Header: [`./include/caffe/layers/tile_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/tile_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/tile_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/tile_layer.cpp)
++* CUDA GPU implementation: [`./src/caffe/layers/tile_layer.cu`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/tile_layer.cu)
++
++## Parameters
++
++* Parameters (`TileParameter tile_param`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/TileParameter.txt %}
++{% endhighlight %}
+diff --git a/docs/tutorial/layers/windowdata.md b/docs/tutorial/layers/windowdata.md
+new file mode 100644
+index 0000000..0cb4a8d
+--- /dev/null
++++ b/docs/tutorial/layers/windowdata.md
+@@ -0,0 +1,19 @@
++---
++title: WindowData Layer
++---
++
++# WindowData Layer
++
++* Layer type: `WindowData`
++* [Doxygen Documentation](http://caffe.berkeleyvision.org/doxygen/classcaffe_1_1WindowDataLayer.html)
++* Header: [`./include/caffe/layers/window_data_layer.hpp`](https://github.com/BVLC/caffe/blob/master/include/caffe/layers/window_data_layer.hpp)
++* CPU implementation: [`./src/caffe/layers/window_data_layer.cpp`](https://github.com/BVLC/caffe/blob/master/src/caffe/layers/window_data_layer.cpp)
++
++## Parameters
++
++* Parameters (`WindowDataParameter`)
++* From [`./src/caffe/proto/caffe.proto`](https://github.com/BVLC/caffe/blob/master/src/caffe/proto/caffe.proto):
++
++{% highlight Protobuf %}
++{% include proto/WindowDataParameter.txt %}
++{% endhighlight %}
+

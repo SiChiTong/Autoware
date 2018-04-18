@@ -1,0 +1,4263 @@
+diff --git a/.gitignore b/.gitignore
+index 93c7b4e..eff292b 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -84,6 +84,7 @@ cmake_build
+ 
+ # Generated documentation
+ docs/_site
++docs/_includes
+ docs/gathered
+ _site
+ doxygen
+@@ -96,8 +97,3 @@ LOCK
+ LOG*
+ CURRENT
+ MANIFEST-*
+-
+-# temporary directories
+-jobs
+-temp
+-examples/*/*lmdb
+diff --git a/Makefile b/Makefile
+index 3fd68d1..85864af 100644
+--- a/Makefile
++++ b/Makefile
+@@ -178,7 +178,7 @@ ifneq ($(CPU_ONLY), 1)
+ 	LIBRARIES := cudart cublas curand
+ endif
+ 
+-LIBRARIES += glog gflags protobuf boost_system boost_filesystem boost_regex m hdf5_hl hdf5
++LIBRARIES += glog gflags protobuf boost_system boost_filesystem boost_regex m hdf5_serial_hl hdf5_serial
+ 
+ # handle IO dependencies
+ USE_LEVELDB ?= 1
+@@ -192,11 +192,8 @@ ifeq ($(USE_LMDB), 1)
+ 	LIBRARIES += lmdb
+ endif
+ ifeq ($(USE_OPENCV), 1)
+-	LIBRARIES += opencv_core opencv_highgui opencv_imgproc
+-
+-	ifeq ($(OPENCV_VERSION), 3)
+-		LIBRARIES += opencv_imgcodecs opencv_videoio
+-	endif
++	LIBRARIES += opencv_core3 opencv_highgui3 opencv_imgproc3
++	LIBRARIES += opencv_imgcodecs3 opencv_videoio3
+ 
+ endif
+ PYTHON_LIBRARIES ?= boost_python python2.7
+diff --git a/Makefile.config.example b/Makefile.config.example
+index eac9312..cfca33e 100644
+--- a/Makefile.config.example
++++ b/Makefile.config.example
+@@ -31,14 +31,17 @@ CUDA_DIR := /usr/local/cuda
+ # CUDA_DIR := /usr
+ 
+ # CUDA architecture setting: going with all of them.
+-# For CUDA < 6.0, comment the lines after *_35 for compatibility.
++# For CUDA < 6.0, comment the *_50 lines for compatibility.
++# CUDA_ARCH := -gencode arch=compute_20,code=sm_20 \
++		-gencode arch=compute_20,code=sm_21 \
++		-gencode arch=compute_30,code=sm_30 \
++		-gencode arch=compute_35,code=sm_35 \
++		-gencode arch=compute_50,code=sm_50 \
++		-gencode arch=compute_50,code=compute_50
+ CUDA_ARCH := -gencode arch=compute_20,code=sm_20 \
+-             -gencode arch=compute_20,code=sm_21 \
+-             -gencode arch=compute_30,code=sm_30 \
+-             -gencode arch=compute_35,code=sm_35 \
+-             -gencode arch=compute_50,code=sm_50 \
+-             -gencode arch=compute_52,code=sm_52 \
+-             -gencode arch=compute_61,code=sm_61
++		-gencode arch=compute_35,code=sm_35 \
++		-gencode arch=compute_53,code=sm_53 \
++		-gencode arch=compute_53,code=compute_53
+ 
+ # BLAS choice:
+ # atlas for ATLAS (default)
+diff --git a/cmake/Cuda.cmake b/cmake/Cuda.cmake
+index 5a400a9..eeeb732 100644
+--- a/cmake/Cuda.cmake
++++ b/cmake/Cuda.cmake
+@@ -4,7 +4,7 @@ endif()
+ 
+ # Known NVIDIA GPU achitectures Caffe can be compiled for.
+ # This list will be used for CUDA_ARCH_NAME = All option
+-set(Caffe_known_gpu_archs "20 21(20) 30 35 50 52 61")
++set(Caffe_known_gpu_archs "20 21(20) 30 35 50")
+ 
+ ################################################################################################
+ # A function for automatic detection of GPUs installed  (if autodetection is enabled)
+diff --git a/cmake/Modules/FindNCCL.cmake b/cmake/Modules/FindNCCL.cmake
+new file mode 100644
+index 0000000..c884593
+--- /dev/null
++++ b/cmake/Modules/FindNCCL.cmake
+@@ -0,0 +1,26 @@
++set(NCCL_INC_PATHS
++    /usr/include
++    /usr/local/include
++    $ENV{NCCL_DIR}/include
++    )
++
++set(NCCL_LIB_PATHS
++    /lib
++    /lib64
++    /usr/lib
++    /usr/lib64
++    /usr/local/lib
++    /usr/local/lib64
++    $ENV{NCCL_DIR}/lib
++    )
++
++find_path(NCCL_INCLUDE_DIR NAMES nccl.h PATHS ${NCCL_INC_PATHS})
++find_library(NCCL_LIBRARIES NAMES nccl PATHS ${NCCL_LIB_PATHS})
++
++include(FindPackageHandleStandardArgs)
++find_package_handle_standard_args(NCCL DEFAULT_MSG NCCL_INCLUDE_DIR NCCL_LIBRARIES)
++
++if (NCCL_FOUND)
++  message(STATUS "Found NCCL    (include: ${NCCL_INCLUDE_DIR}, library: ${NCCL_LIBRARIES})")
++  mark_as_advanced(NCCL_INCLUDE_DIR NCCL_LIBRARIES)
++endif ()
+diff --git a/cmake/Uninstall.cmake.in b/cmake/Uninstall.cmake.in
+new file mode 100644
+index 0000000..bb8e296
+--- /dev/null
++++ b/cmake/Uninstall.cmake.in
+@@ -0,0 +1,26 @@
++if(NOT EXISTS "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt")
++  message(FATAL_ERROR "Cannot find install manifest: @CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt")
++endif(NOT EXISTS "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt")
++
++if (NOT DEFINED CMAKE_INSTALL_PREFIX)
++  set (CMAKE_INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@")
++endif ()
++ message(${CMAKE_INSTALL_PREFIX})
++
++file(READ "@CMAKE_CURRENT_BINARY_DIR@/install_manifest.txt" files)
++string(REGEX REPLACE "\n" ";" files "${files}")
++foreach(file ${files})
++  message(STATUS "Uninstalling $ENV{DESTDIR}${file}")
++  if(IS_SYMLINK "$ENV{DESTDIR}${file}" OR EXISTS "$ENV{DESTDIR}${file}")
++    exec_program(
++      "@CMAKE_COMMAND@" ARGS "-E remove \"$ENV{DESTDIR}${file}\""
++      OUTPUT_VARIABLE rm_out
++      RETURN_VALUE rm_retval
++      )
++    if(NOT "${rm_retval}" STREQUAL 0)
++      message(FATAL_ERROR "Problem when removing $ENV{DESTDIR}${file}")
++    endif(NOT "${rm_retval}" STREQUAL 0)
++  else(IS_SYMLINK "$ENV{DESTDIR}${file}" OR EXISTS "$ENV{DESTDIR}${file}")
++    message(STATUS "File $ENV{DESTDIR}${file} does not exist.")
++  endif(IS_SYMLINK "$ENV{DESTDIR}${file}" OR EXISTS "$ENV{DESTDIR}${file}")
++endforeach(file)
+\ No newline at end of file
+diff --git a/data/VOC0712/coco_voc_map.txt b/data/VOC0712/coco_voc_map.txt
+deleted file mode 100644
+index 7ff84d1..0000000
+--- a/data/VOC0712/coco_voc_map.txt
++++ /dev/null
+@@ -1,21 +0,0 @@
+-0,0,background
+-5,1,aeroplane
+-2,2,bicycle
+-15,3,bird
+-9,4,boat
+-40,5,bottle
+-6,6,bus
+-3,7,car
+-16,8,cat
+-57,9,chair
+-20,10,cow
+-61,11,diningtable
+-17,12,dog
+-18,13,horse
+-4,14,motorbike
+-1,15,person
+-59,16,pottedplant
+-19,17,sheep
+-58,18,sofa
+-7,19,train
+-63,20,tvmonitor
+diff --git a/data/VOC0712/create_data.sh b/data/VOC0712/create_data.sh
+deleted file mode 100755
+index ffcc97d..0000000
+--- a/data/VOC0712/create_data.sh
++++ /dev/null
+@@ -1,25 +0,0 @@
+-cur_dir=$(cd $( dirname ${BASH_SOURCE[0]} ) && pwd )
+-root_dir=$cur_dir/../..
+-
+-cd $root_dir
+-
+-redo=1
+-data_root_dir="$HOME/data/VOCdevkit"
+-dataset_name="VOC0712"
+-mapfile="$root_dir/data/$dataset_name/labelmap_voc.prototxt"
+-anno_type="detection"
+-db="lmdb"
+-min_dim=0
+-max_dim=0
+-width=0
+-height=0
+-
+-extra_cmd="--encode-type=jpg --encoded"
+-if [ $redo ]
+-then
+-  extra_cmd="$extra_cmd --redo"
+-fi
+-for subset in test trainval
+-do
+-  python $root_dir/scripts/create_annoset.py --anno-type=$anno_type --label-map-file=$mapfile --min-dim=$min_dim --max-dim=$max_dim --resize-width=$width --resize-height=$height --check-label $extra_cmd $data_root_dir $root_dir/data/$dataset_name/$subset.txt $data_root_dir/$dataset_name/$db/$dataset_name"_"$subset"_"$db examples/$dataset_name
+-done
+diff --git a/data/VOC0712/create_list.sh b/data/VOC0712/create_list.sh
+deleted file mode 100755
+index 67eb100..0000000
+--- a/data/VOC0712/create_list.sh
++++ /dev/null
+@@ -1,51 +0,0 @@
+-#!/bin/bash
+-
+-root_dir=$HOME/data/VOCdevkit/
+-sub_dir=ImageSets/Main
+-bash_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-for dataset in trainval test
+-do
+-  dst_file=$bash_dir/$dataset.txt
+-  if [ -f $dst_file ]
+-  then
+-    rm -f $dst_file
+-  fi
+-  for name in VOC2007 VOC2012
+-  do
+-    if [[ $dataset == "test" && $name == "VOC2012" ]]
+-    then
+-      continue
+-    fi
+-    echo "Create list for $name $dataset..."
+-    dataset_file=$root_dir/$name/$sub_dir/$dataset.txt
+-
+-    img_file=$bash_dir/$dataset"_img.txt"
+-    cp $dataset_file $img_file
+-    sed -i "s/^/$name\/JPEGImages\//g" $img_file
+-    sed -i "s/$/.jpg/g" $img_file
+-
+-    label_file=$bash_dir/$dataset"_label.txt"
+-    cp $dataset_file $label_file
+-    sed -i "s/^/$name\/Annotations\//g" $label_file
+-    sed -i "s/$/.xml/g" $label_file
+-
+-    paste -d' ' $img_file $label_file >> $dst_file
+-
+-    rm -f $label_file
+-    rm -f $img_file
+-  done
+-
+-  # Generate image name and size infomation.
+-  if [ $dataset == "test" ]
+-  then
+-    $bash_dir/../../build/tools/get_image_size $root_dir $dst_file $bash_dir/$dataset"_name_size.txt"
+-  fi
+-
+-  # Shuffle trainval file.
+-  if [ $dataset == "trainval" ]
+-  then
+-    rand_file=$dst_file.random
+-    cat $dst_file | perl -MList::Util=shuffle -e 'print shuffle(<STDIN>);' > $rand_file
+-    mv $rand_file $dst_file
+-  fi
+-done
+diff --git a/data/VOC0712/labelmap_voc.prototxt b/data/VOC0712/labelmap_voc.prototxt
+deleted file mode 100644
+index b5c177b..0000000
+--- a/data/VOC0712/labelmap_voc.prototxt
++++ /dev/null
+@@ -1,105 +0,0 @@
+-item {
+-  name: "none_of_the_above"
+-  label: 0
+-  display_name: "background"
+-}
+-item {
+-  name: "aeroplane"
+-  label: 1
+-  display_name: "aeroplane"
+-}
+-item {
+-  name: "bicycle"
+-  label: 2
+-  display_name: "bicycle"
+-}
+-item {
+-  name: "bird"
+-  label: 3
+-  display_name: "bird"
+-}
+-item {
+-  name: "boat"
+-  label: 4
+-  display_name: "boat"
+-}
+-item {
+-  name: "bottle"
+-  label: 5
+-  display_name: "bottle"
+-}
+-item {
+-  name: "bus"
+-  label: 6
+-  display_name: "bus"
+-}
+-item {
+-  name: "car"
+-  label: 7
+-  display_name: "car"
+-}
+-item {
+-  name: "cat"
+-  label: 8
+-  display_name: "cat"
+-}
+-item {
+-  name: "chair"
+-  label: 9
+-  display_name: "chair"
+-}
+-item {
+-  name: "cow"
+-  label: 10
+-  display_name: "cow"
+-}
+-item {
+-  name: "diningtable"
+-  label: 11
+-  display_name: "diningtable"
+-}
+-item {
+-  name: "dog"
+-  label: 12
+-  display_name: "dog"
+-}
+-item {
+-  name: "horse"
+-  label: 13
+-  display_name: "horse"
+-}
+-item {
+-  name: "motorbike"
+-  label: 14
+-  display_name: "motorbike"
+-}
+-item {
+-  name: "person"
+-  label: 15
+-  display_name: "person"
+-}
+-item {
+-  name: "pottedplant"
+-  label: 16
+-  display_name: "pottedplant"
+-}
+-item {
+-  name: "sheep"
+-  label: 17
+-  display_name: "sheep"
+-}
+-item {
+-  name: "sofa"
+-  label: 18
+-  display_name: "sofa"
+-}
+-item {
+-  name: "train"
+-  label: 19
+-  display_name: "train"
+-}
+-item {
+-  name: "tvmonitor"
+-  label: 20
+-  display_name: "tvmonitor"
+-}
+diff --git a/data/coco/create_data.sh b/data/coco/create_data.sh
+index 8b0910d..7da3abd 100755
+--- a/data/coco/create_data.sh
++++ b/data/coco/create_data.sh
+@@ -8,7 +8,7 @@ data_root_dir="$HOME/data/coco"
+ dataset_name="coco"
+ mapfile="$root_dir/data/$dataset_name/labelmap_coco.prototxt"
+ anno_type="detection"
+-label_type="xml"
++label_type="json"
+ db="lmdb"
+ min_dim=0
+ max_dim=0
+diff --git a/docker/cpu/Dockerfile b/docker/cpu/Dockerfile
+new file mode 100644
+index 0000000..67e2e61
+--- /dev/null
++++ b/docker/cpu/Dockerfile
+@@ -0,0 +1,46 @@
++FROM ubuntu:16.04
++LABEL maintainer caffe-maint@googlegroups.com
++
++RUN apt-get update && apt-get install -y --no-install-recommends \
++        build-essential \
++        cmake \
++        git \
++        wget \
++        libatlas-base-dev \
++        libboost-all-dev \
++        libgflags-dev \
++        libgoogle-glog-dev \
++        libhdf5-serial-dev \
++        libleveldb-dev \
++        liblmdb-dev \
++        libopencv-dev \
++        libprotobuf-dev \
++        libsnappy-dev \
++        protobuf-compiler \
++        python-dev \
++        python-numpy \
++        python-pip \
++        python-setuptools \
++        python-scipy && \
++    rm -rf /var/lib/apt/lists/*
++
++ENV CAFFE_ROOT=/opt/caffe
++WORKDIR $CAFFE_ROOT
++
++# FIXME: use ARG instead of ENV once DockerHub supports this
++# https://github.com/docker/hub-feedback/issues/460
++ENV CLONE_TAG=1.0
++
++RUN git clone -b ${CLONE_TAG} --depth 1 https://github.com/BVLC/caffe.git . && \
++    pip install --upgrade pip && \
++    cd python && for req in $(cat requirements.txt) pydot; do pip install $req; done && cd .. && \
++    mkdir build && cd build && \
++    cmake -DCPU_ONLY=1 .. && \
++    make -j"$(nproc)"
++
++ENV PYCAFFE_ROOT $CAFFE_ROOT/python
++ENV PYTHONPATH $PYCAFFE_ROOT:$PYTHONPATH
++ENV PATH $CAFFE_ROOT/build/tools:$PYCAFFE_ROOT:$PATH
++RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
++
++WORKDIR /workspace
+diff --git a/docker/gpu/Dockerfile b/docker/gpu/Dockerfile
+new file mode 100644
+index 0000000..dcdbdf3
+--- /dev/null
++++ b/docker/gpu/Dockerfile
+@@ -0,0 +1,47 @@
++FROM nvidia/cuda:8.0-cudnn6-devel-ubuntu16.04
++LABEL maintainer caffe-maint@googlegroups.com
++
++RUN apt-get update && apt-get install -y --no-install-recommends \
++        build-essential \
++        cmake \
++        git \
++        wget \
++        libatlas-base-dev \
++        libboost-all-dev \
++        libgflags-dev \
++        libgoogle-glog-dev \
++        libhdf5-serial-dev \
++        libleveldb-dev \
++        liblmdb-dev \
++        libopencv-dev \
++        libprotobuf-dev \
++        libsnappy-dev \
++        protobuf-compiler \
++        python-dev \
++        python-numpy \
++        python-pip \
++        python-setuptools \
++        python-scipy && \
++    rm -rf /var/lib/apt/lists/*
++
++ENV CAFFE_ROOT=/opt/caffe
++WORKDIR $CAFFE_ROOT
++
++# FIXME: use ARG instead of ENV once DockerHub supports this
++# https://github.com/docker/hub-feedback/issues/460
++ENV CLONE_TAG=1.0
++
++RUN git clone -b ${CLONE_TAG} --depth 1 https://github.com/BVLC/caffe.git . && \
++    pip install --upgrade pip && \
++    cd python && for req in $(cat requirements.txt) pydot; do pip install $req; done && cd .. && \
++    git clone https://github.com/NVIDIA/nccl.git && cd nccl && make -j install && cd .. && rm -rf nccl && \
++    mkdir build && cd build && \
++    cmake -DUSE_CUDNN=1 -DUSE_NCCL=1 .. && \
++    make -j"$(nproc)"
++
++ENV PYCAFFE_ROOT $CAFFE_ROOT/python
++ENV PYTHONPATH $PYCAFFE_ROOT:$PYTHONPATH
++ENV PATH $CAFFE_ROOT/build/tools:$PYCAFFE_ROOT:$PATH
++RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
++
++WORKDIR /workspace
+diff --git a/examples/ssd.ipynb b/examples/ssd.ipynb
+index 23c929c..b61bf5a 100644
+--- a/examples/ssd.ipynb
++++ b/examples/ssd.ipynb
+@@ -133,8 +133,8 @@
+     "\n",
+     "img_blob = net.blobs['data'].data\n",
+     "num_imgs = img_blob.shape[0]\n",
+-    "img_height = img_blob.shape[2]\n",
+-    "img_width = img_blob.shape[3]\n",
++    "img_width = img_blob.shape[2]\n",
++    "img_height = img_blob.shape[3]\n",
+     "label_blob = net.blobs['label'].data[0,0,:,:]\n",
+     "num_labels = label_blob.shape[0]\n",
+     "\n",
+@@ -311,8 +311,8 @@
+    "source": [
+     "img_blob = net.blobs['data'].data\n",
+     "num_imgs = img_blob.shape[0]\n",
+-    "img_height = img_blob.shape[2]\n",
+-    "img_width = img_blob.shape[3]\n",
++    "img_width = img_blob.shape[2]\n",
++    "img_height = img_blob.shape[3]\n",
+     "\n",
+     "priorbox = net.blobs['mbox_priorbox'].data[0,0,:]\n",
+     "num_priors = priorbox.shape[0]\n",
+diff --git a/examples/ssd/plot_detections.py b/examples/ssd/plot_detections.py
+deleted file mode 100644
+index e682b4b..0000000
+--- a/examples/ssd/plot_detections.py
++++ /dev/null
+@@ -1,124 +0,0 @@
+-'''
+-Plot the detection results output by ssd_detect.cpp.
+-'''
+-
+-import argparse
+-from collections import OrderedDict
+-from google.protobuf import text_format
+-import matplotlib
+-# Force matplotlib to not use any Xwindows backend.
+-matplotlib.use('Agg')
+-import matplotlib.pyplot as plt
+-import numpy as np
+-import os
+-import skimage.io as io
+-import sys
+-
+-import caffe
+-from caffe.proto import caffe_pb2
+-
+-def get_labelname(labelmap, labels):
+-    num_labels = len(labelmap.item)
+-    labelnames = []
+-    if type(labels) is not list:
+-        labels = [labels]
+-    for label in labels:
+-        found = False
+-        for i in xrange(0, num_labels):
+-            if label == labelmap.item[i].label:
+-                found = True
+-                labelnames.append(labelmap.item[i].display_name)
+-                break
+-        assert found == True
+-    return labelnames
+-
+-def showResults(img_file, results, labelmap=None, threshold=None, display=None):
+-    if not os.path.exists(img_file):
+-        print "{} does not exist".format(img_file)
+-        return
+-    img = io.imread(img_file)
+-    plt.clf()
+-    plt.imshow(img)
+-    plt.axis('off');
+-    ax = plt.gca()
+-    if labelmap:
+-        # generate same number of colors as classes in labelmap.
+-        num_classes = len(labelmap.item)
+-    else:
+-        # generate 20 colors.
+-        num_classes = 20
+-    colors = plt.cm.hsv(np.linspace(0, 1, num_classes)).tolist()
+-    for res in results:
+-        if 'score' in res and threshold and float(res["score"]) < threshold:
+-            continue
+-        label = res['label']
+-        name = "class " + str(label)
+-        if labelmap:
+-            name = get_labelname(labelmap, label)[0]
+-        if display_classes and name not in display_classes:
+-            continue
+-        color = colors[label % num_classes]
+-        bbox = res['bbox']
+-        coords = (bbox[0], bbox[1]), bbox[2] - bbox[0], bbox[3] - bbox[1]
+-        ax.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=3))
+-        if 'score' in res:
+-            score = res['score']
+-            display_text = '%s: %.2f' % (name, score)
+-        else:
+-            display_text = name
+-        ax.text(bbox[0], bbox[1], display_text, bbox={'facecolor':color, 'alpha':0.5})
+-    if len(results) > 0 and "out_file" in results[0]:
+-        plt.savefig(results[0]["out_file"], bbox_inches="tight")
+-
+-if __name__ == "__main__":
+-    parser = argparse.ArgumentParser(
+-            description = "Plot the detection results output by ssd_detect.")
+-    parser.add_argument("resultfile",
+-            help = "A file which contains all the detection results.")
+-    parser.add_argument("imgdir",
+-            help = "A directory which contains the images.")
+-    parser.add_argument("--labelmap-file", default="",
+-            help = "A file which contains the LabelMap.")
+-    parser.add_argument("--visualize-threshold", default=0.01, type=float,
+-            help = "Display detections with score higher than the threshold.")
+-    parser.add_argument("--save-dir", default="",
+-            help = "A directory which saves the image with detection results.")
+-    parser.add_argument("--display-classes", default=None,
+-            help = "If provided, only display specified class. Separate by ','")
+-
+-    args = parser.parse_args()
+-    result_file = args.resultfile
+-    img_dir = args.imgdir
+-    if not os.path.exists(img_dir):
+-        print "{} does not exist".format(img_dir)
+-        sys.exit()
+-    labelmap_file = args.labelmap_file
+-    labelmap = None
+-    if labelmap_file and os.path.exists(labelmap_file):
+-        file = open(labelmap_file, 'r')
+-        labelmap = caffe_pb2.LabelMap()
+-        text_format.Merge(str(file.read()), labelmap)
+-    visualize_threshold = args.visualize_threshold
+-    save_dir = args.save_dir
+-    if save_dir and not os.path.exists(save_dir):
+-        os.makedirs(save_dir)
+-    display_classes = args.display_classes
+-
+-    img_results = OrderedDict()
+-    with open(result_file, "r") as f:
+-        for line in f.readlines():
+-            img_name, label, score, xmin, ymin, xmax, ymax = line.strip("\n").split()
+-            img_file = "{}/{}".format(img_dir, img_name)
+-            result = dict()
+-            result["label"] = int(label)
+-            result["score"] = float(score)
+-            result["bbox"] = [float(xmin), float(ymin), float(xmax), float(ymax)]
+-            if save_dir:
+-                out_file = "{}/{}.png".format(save_dir, os.path.basename(img_name))
+-                result["out_file"] = out_file
+-            if img_file not in img_results:
+-                img_results[img_file] = [result]
+-            else:
+-                img_results[img_file].append(result)
+-    for img_file, results in img_results.iteritems():
+-        showResults(img_file, results, labelmap, visualize_threshold, display_classes)
+diff --git a/examples/ssd/score_ssd_coco.py b/examples/ssd/score_ssd_coco.py
+index 71c0ee0..c3df281 100644
+--- a/examples/ssd/score_ssd_coco.py
++++ b/examples/ssd/score_ssd_coco.py
+@@ -173,7 +173,6 @@ batch_sampler = [
+ train_transform_param = {
+         'mirror': True,
+         'mean_value': [104, 117, 123],
+-        'force_color': True,
+         'resize_param': {
+                 'prob': 1,
+                 'resize_mode': P.Resize.WARP,
+@@ -200,17 +199,12 @@ train_transform_param = {
+                 'saturation_upper': 1.5,
+                 'random_order_prob': 0.0,
+                 },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+         'emit_constraint': {
+             'emit_type': caffe_pb2.EmitConstraint.CENTER,
+             }
+         }
+ test_transform_param = {
+         'mean_value': [104, 117, 123],
+-        'force_color': True,
+         'resize_param': {
+                 'prob': 1,
+                 'resize_mode': P.Resize.WARP,
+@@ -378,7 +372,7 @@ solver_param = {
+     'base_lr': base_lr,
+     'weight_decay': 0.0005,
+     'lr_policy': "multistep",
+-    'stepvalue': [280000, 360000, 400000],
++    'stepvalue': [160000, 200000, 240000],
+     'gamma': 0.1,
+     'momentum': 0.9,
+     'iter_size': iter_size,
+diff --git a/examples/ssd/score_ssd_pascal.py b/examples/ssd/score_ssd_pascal.py
+index 76fc10c..c01a7df 100644
+--- a/examples/ssd/score_ssd_pascal.py
++++ b/examples/ssd/score_ssd_pascal.py
+@@ -199,10 +199,6 @@ train_transform_param = {
+                 'saturation_upper': 1.5,
+                 'random_order_prob': 0.0,
+                 },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+         'emit_constraint': {
+             'emit_type': caffe_pb2.EmitConstraint.CENTER,
+             }
+@@ -378,7 +374,7 @@ solver_param = {
+     'base_lr': base_lr,
+     'weight_decay': 0.0005,
+     'lr_policy': "multistep",
+-    'stepvalue': [80000, 100000, 120000],
++    'stepvalue': [40000, 50000, 60000],
+     'gamma': 0.1,
+     'momentum': 0.9,
+     'iter_size': iter_size,
+diff --git a/examples/ssd/ssd_coco.py b/examples/ssd/ssd_coco.py
+index 201bd25..005742a 100644
+--- a/examples/ssd/ssd_coco.py
++++ b/examples/ssd/ssd_coco.py
+@@ -175,7 +175,6 @@ batch_sampler = [
+ train_transform_param = {
+         'mirror': True,
+         'mean_value': [104, 117, 123],
+-        'force_color': True,
+         'resize_param': {
+                 'prob': 1,
+                 'resize_mode': P.Resize.WARP,
+@@ -202,17 +201,12 @@ train_transform_param = {
+                 'saturation_upper': 1.5,
+                 'random_order_prob': 0.0,
+                 },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+         'emit_constraint': {
+             'emit_type': caffe_pb2.EmitConstraint.CENTER,
+             }
+         }
+ test_transform_param = {
+         'mean_value': [104, 117, 123],
+-        'force_color': True,
+         'resize_param': {
+                 'prob': 1,
+                 'resize_mode': P.Resize.WARP,
+@@ -367,12 +361,12 @@ solver_param = {
+     'base_lr': base_lr,
+     'weight_decay': 0.0005,
+     'lr_policy': "multistep",
+-    'stepvalue': [280000, 360000, 400000],
++    'stepvalue': [160000, 200000, 240000],
+     'gamma': 0.1,
+     'momentum': 0.9,
+     'iter_size': iter_size,
+-    'max_iter': 400000,
+-    'snapshot': 40000,
++    'max_iter': 240000,
++    'snapshot': 80000,
+     'display': 10,
+     'average_loss': 10,
+     'type': "SGD",
+diff --git a/examples/ssd/ssd_detect.py b/examples/ssd/ssd_detect.py
+deleted file mode 100644
+index 945930b..0000000
+--- a/examples/ssd/ssd_detect.py
++++ /dev/null
+@@ -1,149 +0,0 @@
+-#encoding=utf8
+-'''
+-Detection with SSD
+-In this example, we will load a SSD model and use it to detect objects.
+-'''
+-
+-import os
+-import sys
+-import argparse
+-import numpy as np
+-from PIL import Image, ImageDraw
+-# Make sure that caffe is on the python path:
+-caffe_root = './'
+-os.chdir(caffe_root)
+-sys.path.insert(0, os.path.join(caffe_root, 'python'))
+-import caffe
+-
+-from google.protobuf import text_format
+-from caffe.proto import caffe_pb2
+-
+-
+-def get_labelname(labelmap, labels):
+-    num_labels = len(labelmap.item)
+-    labelnames = []
+-    if type(labels) is not list:
+-        labels = [labels]
+-    for label in labels:
+-        found = False
+-        for i in xrange(0, num_labels):
+-            if label == labelmap.item[i].label:
+-                found = True
+-                labelnames.append(labelmap.item[i].display_name)
+-                break
+-        assert found == True
+-    return labelnames
+-
+-class CaffeDetection:
+-    def __init__(self, gpu_id, model_def, model_weights, image_resize, labelmap_file):
+-        caffe.set_device(gpu_id)
+-        caffe.set_mode_gpu()
+-
+-        self.image_resize = image_resize
+-        # Load the net in the test phase for inference, and configure input preprocessing.
+-        self.net = caffe.Net(model_def,      # defines the structure of the model
+-                             model_weights,  # contains the trained weights
+-                             caffe.TEST)     # use test mode (e.g., don't perform dropout)
+-         # input preprocessing: 'data' is the name of the input blob == net.inputs[0]
+-        self.transformer = caffe.io.Transformer({'data': self.net.blobs['data'].data.shape})
+-        self.transformer.set_transpose('data', (2, 0, 1))
+-        self.transformer.set_mean('data', np.array([104, 117, 123])) # mean pixel
+-        # the reference model operates on images in [0,255] range instead of [0,1]
+-        self.transformer.set_raw_scale('data', 255)
+-        # the reference model has channels in BGR order instead of RGB
+-        self.transformer.set_channel_swap('data', (2, 1, 0))
+-
+-        # load PASCAL VOC labels
+-        file = open(labelmap_file, 'r')
+-        self.labelmap = caffe_pb2.LabelMap()
+-        text_format.Merge(str(file.read()), self.labelmap)
+-
+-    def detect(self, image_file, conf_thresh=0.5, topn=5):
+-        '''
+-        SSD detection
+-        '''
+-        # set net to batch size of 1
+-        # image_resize = 300
+-        self.net.blobs['data'].reshape(1, 3, self.image_resize, self.image_resize)
+-        image = caffe.io.load_image(image_file)
+-
+-        #Run the net and examine the top_k results
+-        transformed_image = self.transformer.preprocess('data', image)
+-        self.net.blobs['data'].data[...] = transformed_image
+-
+-        # Forward pass.
+-        detections = self.net.forward()['detection_out']
+-
+-        # Parse the outputs.
+-        det_label = detections[0,0,:,1]
+-        det_conf = detections[0,0,:,2]
+-        det_xmin = detections[0,0,:,3]
+-        det_ymin = detections[0,0,:,4]
+-        det_xmax = detections[0,0,:,5]
+-        det_ymax = detections[0,0,:,6]
+-
+-        # Get detections with confidence higher than 0.6.
+-        top_indices = [i for i, conf in enumerate(det_conf) if conf >= conf_thresh]
+-
+-        top_conf = det_conf[top_indices]
+-        top_label_indices = det_label[top_indices].tolist()
+-        top_labels = get_labelname(self.labelmap, top_label_indices)
+-        top_xmin = det_xmin[top_indices]
+-        top_ymin = det_ymin[top_indices]
+-        top_xmax = det_xmax[top_indices]
+-        top_ymax = det_ymax[top_indices]
+-
+-        result = []
+-        for i in xrange(min(topn, top_conf.shape[0])):
+-            xmin = top_xmin[i] # xmin = int(round(top_xmin[i] * image.shape[1]))
+-            ymin = top_ymin[i] # ymin = int(round(top_ymin[i] * image.shape[0]))
+-            xmax = top_xmax[i] # xmax = int(round(top_xmax[i] * image.shape[1]))
+-            ymax = top_ymax[i] # ymax = int(round(top_ymax[i] * image.shape[0]))
+-            score = top_conf[i]
+-            label = int(top_label_indices[i])
+-            label_name = top_labels[i]
+-            result.append([xmin, ymin, xmax, ymax, label, score, label_name])
+-        return result
+-
+-def main(args):
+-    '''main '''
+-    detection = CaffeDetection(args.gpu_id,
+-                               args.model_def, args.model_weights,
+-                               args.image_resize, args.labelmap_file)
+-    result = detection.detect(args.image_file)
+-    print result
+-
+-    img = Image.open(args.image_file)
+-    draw = ImageDraw.Draw(img)
+-    width, height = img.size
+-    print width, height
+-    for item in result:
+-        xmin = int(round(item[0] * width))
+-        ymin = int(round(item[1] * height))
+-        xmax = int(round(item[2] * width))
+-        ymax = int(round(item[3] * height))
+-        draw.rectangle([xmin, ymin, xmax, ymax], outline=(255, 0, 0))
+-        draw.text([xmin, ymin], item[-1] + str(item[-2]), (0, 0, 255))
+-        print item
+-        print [xmin, ymin, xmax, ymax]
+-        print [xmin, ymin], item[-1]
+-    img.save('detect_result.jpg')
+-
+-
+-def parse_args():
+-    '''parse args'''
+-    parser = argparse.ArgumentParser()
+-    parser.add_argument('--gpu_id', type=int, default=0, help='gpu id')
+-    parser.add_argument('--labelmap_file',
+-                        default='data/VOC0712/labelmap_voc.prototxt')
+-    parser.add_argument('--model_def',
+-                        default='models/VGGNet/VOC0712/SSD_300x300/deploy.prototxt')
+-    parser.add_argument('--image_resize', default=300, type=int)
+-    parser.add_argument('--model_weights',
+-                        default='models/VGGNet/VOC0712/SSD_300x300/'
+-                        'VGG_VOC0712_SSD_300x300_iter_120000.caffemodel')
+-    parser.add_argument('--image_file', default='examples/images/fish-bike.jpg')
+-    return parser.parse_args()
+-
+-if __name__ == '__main__':
+-    main(parse_args())
+diff --git a/examples/ssd/ssd_ilsvrc.py b/examples/ssd/ssd_ilsvrc.py
+deleted file mode 100644
+index 1fa0a8e..0000000
+--- a/examples/ssd/ssd_ilsvrc.py
++++ /dev/null
+@@ -1,573 +0,0 @@
+-from __future__ import print_function
+-import caffe
+-from caffe.model_libs import *
+-from google.protobuf import text_format
+-
+-import math
+-import os
+-import shutil
+-import stat
+-import subprocess
+-import sys
+-
+-# Add extra layers on top of a "base" network (e.g. VGGNet or Inception).
+-def AddExtraLayers(net, use_batchnorm=True, lr_mult=1):
+-    use_relu = True
+-
+-    # Add additional convolutional layers.
+-    # 19 x 19
+-    from_layer = net.keys()[-1]
+-
+-    # TODO(weiliu89): Construct the name using the last layer to avoid duplication.
+-    # 10 x 10
+-    out_layer = "conv6_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 1, 0, 1,
+-        lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv6_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 512, 3, 1, 2,
+-        lr_mult=lr_mult)
+-
+-    # 5 x 5
+-    from_layer = out_layer
+-    out_layer = "conv7_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv7_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 1, 2,
+-      lr_mult=lr_mult)
+-
+-    # 3 x 3
+-    from_layer = out_layer
+-    out_layer = "conv8_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv8_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    # 1 x 1
+-    from_layer = out_layer
+-    out_layer = "conv9_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv9_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    return net
+-
+-
+-### Modify the following parameters accordingly ###
+-# The directory which contains the caffe code.
+-# We assume you are running the script at the CAFFE_ROOT.
+-caffe_root = os.getcwd()
+-
+-# Set true if you want to start training right after generating all files.
+-run_soon = True
+-# Set true if you want to load from most recently saved snapshot.
+-# Otherwise, we will load from the pretrain_model defined below.
+-resume_training = True
+-# If true, Remove old model files.
+-remove_old_models = True
+-
+-# The database file for training data. Created by data/ILSVRC2016/create_data.sh
+-train_data = "examples/ILSVRC2016/ILSVRC2016_trainval1_lmdb"
+-# The database file for testing data. Created by data/ILSVRC2016/create_data.sh
+-test_data = "examples/ILSVRC2016/ILSVRC2016_val2_lmdb"
+-# Specify the batch sampler.
+-resize_width = 300
+-resize_height = 300
+-resize = "{}x{}".format(resize_width, resize_height)
+-batch_sampler = [
+-        {
+-                'sampler': {
+-                        },
+-                'max_trials': 1,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.1,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.3,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.5,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.7,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.9,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'max_jaccard_overlap': 1.0,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        ]
+-train_transform_param = {
+-        'mirror': True,
+-        'mean_value': [104, 117, 123],
+-        'force_color': True,
+-        'resize_param': {
+-                'prob': 1,
+-                'resize_mode': P.Resize.WARP,
+-                'height': resize_height,
+-                'width': resize_width,
+-                'interp_mode': [
+-                        P.Resize.LINEAR,
+-                        P.Resize.AREA,
+-                        P.Resize.NEAREST,
+-                        P.Resize.CUBIC,
+-                        P.Resize.LANCZOS4,
+-                        ],
+-                },
+-        'distort_param': {
+-                'brightness_prob': 0.5,
+-                'brightness_delta': 32,
+-                'contrast_prob': 0.5,
+-                'contrast_lower': 0.5,
+-                'contrast_upper': 1.5,
+-                'hue_prob': 0.5,
+-                'hue_delta': 18,
+-                'saturation_prob': 0.5,
+-                'saturation_lower': 0.5,
+-                'saturation_upper': 1.5,
+-                'random_order_prob': 0.0,
+-                },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+-        'emit_constraint': {
+-            'emit_type': caffe_pb2.EmitConstraint.CENTER,
+-            }
+-        }
+-test_transform_param = {
+-        'mean_value': [104, 117, 123],
+-        'force_color': True,
+-        'resize_param': {
+-                'prob': 1,
+-                'resize_mode': P.Resize.WARP,
+-                'height': resize_height,
+-                'width': resize_width,
+-                'interp_mode': [P.Resize.LINEAR],
+-                },
+-        }
+-
+-# If true, use batch norm for all newly added layers.
+-# Currently only the non batch norm version has been tested.
+-use_batchnorm = False
+-lr_mult = 1
+-# Use different initial learning rate.
+-if use_batchnorm:
+-    base_lr = 0.0004
+-else:
+-    # A learning rate for batch_size = 1, num_gpus = 1.
+-    base_lr = 0.00004
+-
+-# Modify the job name if you want.
+-job_name = "SSD_{}".format(resize)
+-# The name of the model. Modify it if you want.
+-model_name = "VGG_ILSVRC2016_{}".format(job_name)
+-
+-# Directory which stores the model .prototxt file.
+-save_dir = "models/VGGNet/ILSVRC2016/{}".format(job_name)
+-# Directory which stores the snapshot of models.
+-snapshot_dir = "models/VGGNet/ILSVRC2016/{}".format(job_name)
+-# Directory which stores the job script and log file.
+-job_dir = "jobs/VGGNet/ILSVRC2016/{}".format(job_name)
+-# Directory which stores the detection results.
+-output_result_dir = "{}/data/ILSVRC2016/results/{}".format(os.environ['HOME'], job_name)
+-
+-# model definition files.
+-train_net_file = "{}/train.prototxt".format(save_dir)
+-test_net_file = "{}/test.prototxt".format(save_dir)
+-deploy_net_file = "{}/deploy.prototxt".format(save_dir)
+-solver_file = "{}/solver.prototxt".format(save_dir)
+-# snapshot prefix.
+-snapshot_prefix = "{}/{}".format(snapshot_dir, model_name)
+-# job script path.
+-job_file = "{}/{}.sh".format(job_dir, model_name)
+-
+-# Stores the test image names and sizes. Created by data/ILSVRC2016/create_list.py
+-name_size_file = "data/ILSVRC2016/val2_name_size.txt"
+-# The pretrained model. We use the Fully convolutional reduced (atrous) VGGNet.
+-pretrain_model = "models/VGGNet/VGG_ILSVRC_16_layers_fc_reduced.caffemodel"
+-# Stores LabelMapItem.
+-label_map_file = "data/ILSVRC2016/labelmap_ilsvrc_det.prototxt"
+-
+-# MultiBoxLoss parameters.
+-num_classes = 201
+-share_location = True
+-background_label_id=0
+-train_on_diff_gt = False
+-normalization_mode = P.Loss.VALID
+-code_type = P.PriorBox.CENTER_SIZE
+-ignore_cross_boundary_bbox = False
+-mining_type = P.MultiBoxLoss.MAX_NEGATIVE
+-neg_pos_ratio = 3.
+-loc_weight = (neg_pos_ratio + 1.) / 4.
+-multibox_loss_param = {
+-    'loc_loss_type': P.MultiBoxLoss.SMOOTH_L1,
+-    'conf_loss_type': P.MultiBoxLoss.SOFTMAX,
+-    'loc_weight': loc_weight,
+-    'num_classes': num_classes,
+-    'share_location': share_location,
+-    'match_type': P.MultiBoxLoss.PER_PREDICTION,
+-    'overlap_threshold': 0.5,
+-    'use_prior_for_matching': True,
+-    'background_label_id': background_label_id,
+-    'use_difficult_gt': train_on_diff_gt,
+-    'mining_type': mining_type,
+-    'neg_pos_ratio': neg_pos_ratio,
+-    'neg_overlap': 0.5,
+-    'code_type': code_type,
+-    'ignore_cross_boundary_bbox': ignore_cross_boundary_bbox,
+-    }
+-loss_param = {
+-    'normalization': normalization_mode,
+-    }
+-
+-# parameters for generating priors.
+-# minimum dimension of input image
+-min_dim = 300
+-# conv4_3 ==> 38 x 38
+-# fc7 ==> 19 x 19
+-# conv6_2 ==> 10 x 10
+-# conv7_2 ==> 5 x 5
+-# conv8_2 ==> 3 x 3
+-# conv9_2 ==> 1 x 1
+-mbox_source_layers = ['conv4_3', 'fc7', 'conv6_2', 'conv7_2', 'conv8_2', 'conv9_2']
+-# in percent %
+-min_ratio = 20
+-max_ratio = 90
+-step = int(math.floor((max_ratio - min_ratio) / (len(mbox_source_layers) - 2)))
+-min_sizes = []
+-max_sizes = []
+-for ratio in xrange(min_ratio, max_ratio + 1, step):
+-  min_sizes.append(min_dim * ratio / 100.)
+-  max_sizes.append(min_dim * (ratio + step) / 100.)
+-min_sizes = [min_dim * 10 / 100.] + min_sizes
+-max_sizes = [min_dim * 20 / 100.] + max_sizes
+-steps = [8, 16, 32, 64, 100, 300]
+-aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
+-# L2 normalize conv4_3.
+-normalizations = [20, -1, -1, -1, -1, -1]
+-# variance used to encode/decode prior bboxes.
+-if code_type == P.PriorBox.CENTER_SIZE:
+-  prior_variance = [0.1, 0.1, 0.2, 0.2]
+-else:
+-  prior_variance = [0.1]
+-flip = True
+-clip = False
+-
+-# Solver parameters.
+-# Defining which GPUs to use.
+-gpus = "0,1,2,3"
+-gpulist = gpus.split(",")
+-num_gpus = len(gpulist)
+-
+-# Divide the mini-batch to different GPUs.
+-batch_size = 32
+-accum_batch_size = 32
+-iter_size = accum_batch_size / batch_size
+-solver_mode = P.Solver.CPU
+-device_id = 0
+-batch_size_per_device = batch_size
+-if num_gpus > 0:
+-  batch_size_per_device = int(math.ceil(float(batch_size) / num_gpus))
+-  iter_size = int(math.ceil(float(accum_batch_size) / (batch_size_per_device * num_gpus)))
+-  solver_mode = P.Solver.GPU
+-  device_id = int(gpulist[0])
+-
+-if normalization_mode == P.Loss.NONE:
+-  base_lr /= batch_size_per_device
+-elif normalization_mode == P.Loss.VALID:
+-  base_lr *= 25. / loc_weight
+-elif normalization_mode == P.Loss.FULL:
+-  # Roughly there are 2000 prior bboxes per image.
+-  # TODO(weiliu89): Estimate the exact # of priors.
+-  base_lr *= 2000.
+-
+-# Evaluate on whole test set.
+-num_test_image = 9917
+-test_batch_size = 1
+-test_iter = num_test_image / test_batch_size
+-
+-solver_param = {
+-    # Train parameters
+-    'base_lr': base_lr,
+-    'weight_decay': 0.0005,
+-    'lr_policy': "multistep",
+-    'stepvalue': [320000, 400000, 440000],
+-    'gamma': 0.1,
+-    'momentum': 0.9,
+-    'iter_size': iter_size,
+-    'max_iter': 440000,
+-    'snapshot': 30000,
+-    'display': 10,
+-    'average_loss': 10,
+-    'type': "SGD",
+-    'solver_mode': solver_mode,
+-    'device_id': device_id,
+-    'debug_info': False,
+-    'snapshot_after_train': True,
+-    # Test parameters
+-    'test_iter': [test_iter],
+-    'test_interval': 10000,
+-    'eval_type': "detection",
+-    'ap_version': "MaxIntegral",
+-    'test_initialization': False,
+-    }
+-
+-# parameters for generating detection output.
+-det_out_param = {
+-    'num_classes': num_classes,
+-    'share_location': share_location,
+-    'background_label_id': background_label_id,
+-    'nms_param': {'nms_threshold': 0.45, 'top_k': 400},
+-    'save_output_param': {
+-        'output_directory': output_result_dir,
+-        'output_name_prefix': "val2_ssd{}_results".format(min_dim),
+-        'output_format': "ILSVRC",
+-        'label_map_file': label_map_file,
+-        'name_size_file': name_size_file,
+-        'num_test_image': num_test_image,
+-        },
+-    'keep_top_k': 200,
+-    'confidence_threshold': 0.01,
+-    'code_type': code_type,
+-    }
+-
+-# parameters for evaluating detection results.
+-det_eval_param = {
+-    'num_classes': num_classes,
+-    'background_label_id': background_label_id,
+-    'overlap_threshold': 0.5,
+-    'evaluate_difficult_gt': False,
+-    'name_size_file': name_size_file,
+-    }
+-
+-### Hopefully you don't need to change the following ###
+-# Check file.
+-check_if_exist(train_data)
+-check_if_exist(test_data)
+-check_if_exist(label_map_file)
+-check_if_exist(pretrain_model)
+-make_if_not_exist(save_dir)
+-make_if_not_exist(job_dir)
+-make_if_not_exist(snapshot_dir)
+-
+-# Create train net.
+-net = caffe.NetSpec()
+-net.data, net.label = CreateAnnotatedDataLayer(train_data, batch_size=batch_size_per_device,
+-        train=True, output_label=True, label_map_file=label_map_file,
+-        transform_param=train_transform_param, batch_sampler=batch_sampler)
+-
+-VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
+-
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
+-
+-mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+-        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
+-        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
+-
+-# Create the MultiBoxLossLayer.
+-name = "mbox_loss"
+-mbox_layers.append(net.label)
+-net[name] = L.MultiBoxLoss(*mbox_layers, multibox_loss_param=multibox_loss_param,
+-        loss_param=loss_param, include=dict(phase=caffe_pb2.Phase.Value('TRAIN')),
+-        propagate_down=[True, True, False, False])
+-
+-with open(train_net_file, 'w') as f:
+-    print('name: "{}_train"'.format(model_name), file=f)
+-    print(net.to_proto(), file=f)
+-shutil.copy(train_net_file, job_dir)
+-
+-# Create test net.
+-net = caffe.NetSpec()
+-net.data, net.label = CreateAnnotatedDataLayer(test_data, batch_size=test_batch_size,
+-        train=False, output_label=True, label_map_file=label_map_file,
+-        transform_param=test_transform_param)
+-
+-VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
+-
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
+-
+-mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+-        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
+-        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
+-
+-conf_name = "mbox_conf"
+-if multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.SOFTMAX:
+-  reshape_name = "{}_reshape".format(conf_name)
+-  net[reshape_name] = L.Reshape(net[conf_name], shape=dict(dim=[0, -1, num_classes]))
+-  softmax_name = "{}_softmax".format(conf_name)
+-  net[softmax_name] = L.Softmax(net[reshape_name], axis=2)
+-  flatten_name = "{}_flatten".format(conf_name)
+-  net[flatten_name] = L.Flatten(net[softmax_name], axis=1)
+-  mbox_layers[1] = net[flatten_name]
+-elif multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.LOGISTIC:
+-  sigmoid_name = "{}_sigmoid".format(conf_name)
+-  net[sigmoid_name] = L.Sigmoid(net[conf_name])
+-  mbox_layers[1] = net[sigmoid_name]
+-
+-net.detection_out = L.DetectionOutput(*mbox_layers,
+-    detection_output_param=det_out_param,
+-    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
+-net.detection_eval = L.DetectionEvaluate(net.detection_out, net.label,
+-    detection_evaluate_param=det_eval_param,
+-    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
+-
+-with open(test_net_file, 'w') as f:
+-    print('name: "{}_test"'.format(model_name), file=f)
+-    print(net.to_proto(), file=f)
+-shutil.copy(test_net_file, job_dir)
+-
+-# Create deploy net.
+-# Remove the first and last layer from test net.
+-deploy_net = net
+-with open(deploy_net_file, 'w') as f:
+-    net_param = deploy_net.to_proto()
+-    # Remove the first (AnnotatedData) and last (DetectionEvaluate) layer from test net.
+-    del net_param.layer[0]
+-    del net_param.layer[-1]
+-    net_param.name = '{}_deploy'.format(model_name)
+-    net_param.input.extend(['data'])
+-    net_param.input_shape.extend([
+-        caffe_pb2.BlobShape(dim=[1, 3, resize_height, resize_width])])
+-    print(net_param, file=f)
+-shutil.copy(deploy_net_file, job_dir)
+-
+-# Create solver.
+-solver = caffe_pb2.SolverParameter(
+-        train_net=train_net_file,
+-        test_net=[test_net_file],
+-        snapshot_prefix=snapshot_prefix,
+-        **solver_param)
+-
+-with open(solver_file, 'w') as f:
+-    print(solver, file=f)
+-shutil.copy(solver_file, job_dir)
+-
+-max_iter = 0
+-# Find most recent snapshot.
+-for file in os.listdir(snapshot_dir):
+-  if file.endswith(".solverstate"):
+-    basename = os.path.splitext(file)[0]
+-    iter = int(basename.split("{}_iter_".format(model_name))[1])
+-    if iter > max_iter:
+-      max_iter = iter
+-
+-train_src_param = '--weights="{}" \\\n'.format(pretrain_model)
+-if resume_training:
+-  if max_iter > 0:
+-    train_src_param = '--snapshot="{}_iter_{}.solverstate" \\\n'.format(snapshot_prefix, max_iter)
+-
+-if remove_old_models:
+-  # Remove any snapshots smaller than max_iter.
+-  for file in os.listdir(snapshot_dir):
+-    if file.endswith(".solverstate"):
+-      basename = os.path.splitext(file)[0]
+-      iter = int(basename.split("{}_iter_".format(model_name))[1])
+-      if max_iter > iter:
+-        os.remove("{}/{}".format(snapshot_dir, file))
+-    if file.endswith(".caffemodel"):
+-      basename = os.path.splitext(file)[0]
+-      iter = int(basename.split("{}_iter_".format(model_name))[1])
+-      if max_iter > iter:
+-        os.remove("{}/{}".format(snapshot_dir, file))
+-
+-# Create job file.
+-with open(job_file, 'w') as f:
+-  f.write('cd {}\n'.format(caffe_root))
+-  f.write('./build/tools/caffe train \\\n')
+-  f.write('--solver="{}" \\\n'.format(solver_file))
+-  f.write(train_src_param)
+-  if solver_param['solver_mode'] == P.Solver.GPU:
+-    f.write('--gpu {} 2>&1 | tee {}/{}.log\n'.format(gpus, job_dir, model_name))
+-  else:
+-    f.write('2>&1 | tee {}/{}.log\n'.format(job_dir, model_name))
+-
+-# Copy the python script to job_dir.
+-py_file = os.path.abspath(__file__)
+-shutil.copy(py_file, job_dir)
+-
+-# Run the job.
+-os.chmod(job_file, stat.S_IRWXU)
+-if run_soon:
+-  subprocess.call(job_file, shell=True)
+diff --git a/examples/ssd/ssd_pascal.py b/examples/ssd/ssd_pascal.py
+index 62129ba..1e59873 100644
+--- a/examples/ssd/ssd_pascal.py
++++ b/examples/ssd/ssd_pascal.py
+@@ -358,9 +358,7 @@ elif normalization_mode == P.Loss.FULL:
+ # Evaluate on whole test set.
+ num_test_image = 4952
+ test_batch_size = 8
+-# Ideally test_batch_size should be divisible by num_test_image,
+-# otherwise mAP will be slightly off the true value.
+-test_iter = int(math.ceil(float(num_test_image) / test_batch_size))
++test_iter = num_test_image / test_batch_size
+ 
+ solver_param = {
+     # Train parameters
+diff --git a/examples/ssd/ssd_pascal_500.py b/examples/ssd/ssd_pascal_500.py
+new file mode 100644
+index 0000000..f85385f
+--- /dev/null
++++ b/examples/ssd/ssd_pascal_500.py
+@@ -0,0 +1,528 @@
++from __future__ import print_function
++import caffe
++from caffe.model_libs import *
++from google.protobuf import text_format
++
++import math
++import os
++import shutil
++import stat
++import subprocess
++import sys
++
++# Add extra layers on top of a "base" network (e.g. VGGNet or Inception).
++def AddExtraLayers(net, use_batchnorm=True):
++    use_relu = True
++
++    # Add additional convolutional layers.
++    from_layer = net.keys()[-1]
++    # TODO(weiliu89): Construct the name using the last layer to avoid duplication.
++    out_layer = "conv6_1"
++    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 1, 0, 1)
++
++    from_layer = out_layer
++    out_layer = "conv6_2"
++    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 512, 3, 1, 2)
++
++    for i in xrange(7, 10):
++      from_layer = out_layer
++      out_layer = "conv{}_1".format(i)
++      ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1)
++
++      from_layer = out_layer
++      out_layer = "conv{}_2".format(i)
++      ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 1, 2)
++
++    # Add global pooling layer.
++    name = net.keys()[-1]
++    net.pool6 = L.Pooling(net[name], pool=P.Pooling.AVE, global_pooling=True)
++
++    return net
++
++
++### Modify the following parameters accordingly ###
++# The directory which contains the caffe code.
++# We assume you are running the script at the CAFFE_ROOT.
++caffe_root = os.getcwd()
++
++# Set true if you want to start training right after generating all files.
++run_soon = True
++# Set true if you want to load from most recently saved snapshot.
++# Otherwise, we will load from the pretrain_model defined below.
++resume_training = True
++# If true, Remove old model files.
++remove_old_models = False
++
++# The database file for training data. Created by data/VOC0712/create_data.sh
++train_data = "examples/VOC0712/VOC0712_trainval_lmdb"
++# The database file for testing data. Created by data/VOC0712/create_data.sh
++test_data = "examples/VOC0712/VOC0712_test_lmdb"
++# Specify the batch sampler.
++resize_width = 500
++resize_height = 500
++resize = "{}x{}".format(resize_width, resize_height)
++batch_sampler = [
++        {
++                'sampler': {
++                        },
++                'max_trials': 1,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'min_jaccard_overlap': 0.1,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'min_jaccard_overlap': 0.3,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'min_jaccard_overlap': 0.5,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'min_jaccard_overlap': 0.7,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'min_jaccard_overlap': 0.9,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        {
++                'sampler': {
++                        'min_scale': 0.3,
++                        'max_scale': 1.0,
++                        'min_aspect_ratio': 0.5,
++                        'max_aspect_ratio': 2.0,
++                        },
++                'sample_constraint': {
++                        'max_jaccard_overlap': 1.0,
++                        },
++                'max_trials': 50,
++                'max_sample': 1,
++        },
++        ]
++train_transform_param = {
++        'mirror': True,
++        'mean_value': [104, 117, 123],
++        'resize_param': {
++                'prob': 1,
++                'resize_mode': P.Resize.WARP,
++                'height': resize_height,
++                'width': resize_width,
++                'interp_mode': [
++                        P.Resize.LINEAR,
++                        P.Resize.AREA,
++                        P.Resize.NEAREST,
++                        P.Resize.CUBIC,
++                        P.Resize.LANCZOS4,
++                        ],
++                },
++        'emit_constraint': {
++            'emit_type': caffe_pb2.EmitConstraint.CENTER,
++            }
++        }
++test_transform_param = {
++        'mean_value': [104, 117, 123],
++        'resize_param': {
++                'prob': 1,
++                'resize_mode': P.Resize.WARP,
++                'height': resize_height,
++                'width': resize_width,
++                'interp_mode': [P.Resize.LINEAR],
++                },
++        }
++
++# If true, use batch norm for all newly added layers.
++# Currently only the non batch norm version has been tested.
++use_batchnorm = False
++# Use different initial learning rate.
++if use_batchnorm:
++    base_lr = 0.0004
++else:
++    # A learning rate for batch_size = 1, num_gpus = 1.
++    base_lr = 0.00004
++
++# Modify the job name if you want.
++job_name = "SSD_{}".format(resize)
++# The name of the model. Modify it if you want.
++model_name = "VGG_VOC0712_{}".format(job_name)
++
++# Directory which stores the model .prototxt file.
++save_dir = "models/VGGNet/VOC0712/{}".format(job_name)
++# Directory which stores the snapshot of models.
++snapshot_dir = "models/VGGNet/VOC0712/{}".format(job_name)
++# Directory which stores the job script and log file.
++job_dir = "jobs/VGGNet/VOC0712/{}".format(job_name)
++# Directory which stores the detection results.
++output_result_dir = "{}/data/VOCdevkit/results/VOC2007/{}/Main".format(os.environ['HOME'], job_name)
++
++# model definition files.
++train_net_file = "{}/train.prototxt".format(save_dir)
++test_net_file = "{}/test.prototxt".format(save_dir)
++deploy_net_file = "{}/deploy.prototxt".format(save_dir)
++solver_file = "{}/solver.prototxt".format(save_dir)
++# snapshot prefix.
++snapshot_prefix = "{}/{}".format(snapshot_dir, model_name)
++# job script path.
++job_file = "{}/{}.sh".format(job_dir, model_name)
++
++# Stores the test image names and sizes. Created by data/VOC0712/create_list.sh
++name_size_file = "data/VOC0712/test_name_size.txt"
++# The pretrained model. We use the Fully convolutional reduced (atrous) VGGNet.
++pretrain_model = "models/VGGNet/VGG_ILSVRC_16_layers_fc_reduced.caffemodel"
++# Stores LabelMapItem.
++label_map_file = "data/VOC0712/labelmap_voc.prototxt"
++
++# MultiBoxLoss parameters.
++num_classes = 21
++share_location = True
++background_label_id=0
++train_on_diff_gt = True
++normalization_mode = P.Loss.VALID
++code_type = P.PriorBox.CENTER_SIZE
++neg_pos_ratio = 3.
++loc_weight = (neg_pos_ratio + 1.) / 4.
++multibox_loss_param = {
++    'loc_loss_type': P.MultiBoxLoss.SMOOTH_L1,
++    'conf_loss_type': P.MultiBoxLoss.SOFTMAX,
++    'loc_weight': loc_weight,
++    'num_classes': num_classes,
++    'share_location': share_location,
++    'match_type': P.MultiBoxLoss.PER_PREDICTION,
++    'overlap_threshold': 0.5,
++    'use_prior_for_matching': True,
++    'background_label_id': background_label_id,
++    'use_difficult_gt': train_on_diff_gt,
++    'do_neg_mining': True,
++    'neg_pos_ratio': neg_pos_ratio,
++    'neg_overlap': 0.5,
++    'code_type': code_type,
++    }
++loss_param = {
++    'normalization': normalization_mode,
++    }
++
++# parameters for generating priors.
++# minimum dimension of input image
++min_dim = 500
++# conv4_3 ==> 63 x 63
++# fc7 ==> 32 x 32
++# conv6_2 ==> 16 x 16
++# conv7_2 ==> 8 x 8
++# conv8_2 ==> 4 x 4
++# conv9_2 ==> 2 x 2
++# pool6 ==> 1 x 1
++mbox_source_layers = ['conv4_3', 'fc7', 'conv6_2', 'conv7_2', 'conv8_2', 'conv9_2', 'pool6']
++# in percent %
++min_ratio = 15
++max_ratio = 95
++step = int(math.floor((max_ratio - min_ratio) / (len(mbox_source_layers) - 2)))
++min_sizes = []
++max_sizes = []
++for ratio in xrange(min_ratio, max_ratio + 1, step):
++  min_sizes.append(min_dim * ratio / 100.)
++  max_sizes.append(min_dim * (ratio + step) / 100.)
++min_sizes = [min_dim * 7 / 100.] + min_sizes
++max_sizes = [[]] + max_sizes
++aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
++# L2 normalize conv4_3.
++normalizations = [20, -1, -1, -1, -1, -1, -1]
++# variance used to encode/decode prior bboxes.
++if code_type == P.PriorBox.CENTER_SIZE:
++  prior_variance = [0.1, 0.1, 0.2, 0.2]
++else:
++  prior_variance = [0.1]
++flip = True
++clip = True
++
++# Solver parameters.
++# Defining which GPUs to use.
++gpus = "0,1,2,3"
++gpulist = gpus.split(",")
++num_gpus = len(gpulist)
++
++# Divide the mini-batch to different GPUs.
++batch_size = 32
++accum_batch_size = 32
++iter_size = accum_batch_size / batch_size
++solver_mode = P.Solver.CPU
++device_id = 0
++batch_size_per_device = batch_size
++if num_gpus > 0:
++  batch_size_per_device = int(math.ceil(float(batch_size) / num_gpus))
++  iter_size = int(math.ceil(float(accum_batch_size) / (batch_size_per_device * num_gpus)))
++  solver_mode = P.Solver.GPU
++  device_id = int(gpulist[0])
++
++if normalization_mode == P.Loss.NONE:
++  base_lr /= batch_size_per_device
++elif normalization_mode == P.Loss.VALID:
++  base_lr *= 25. / loc_weight
++elif normalization_mode == P.Loss.FULL:
++  # Roughly there are 2000 prior bboxes per image.
++  # TODO(weiliu89): Estimate the exact # of priors.
++  base_lr *= 2000.
++
++# Which layers to freeze (no backward) during training.
++freeze_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2']
++
++# Evaluate on whole test set.
++num_test_image = 4952
++test_batch_size = 1
++test_iter = num_test_image / test_batch_size
++
++solver_param = {
++    # Train parameters
++    'base_lr': base_lr,
++    'weight_decay': 0.0005,
++    'lr_policy': "step",
++    'stepsize': 40000,
++    'gamma': 0.1,
++    'momentum': 0.9,
++    'iter_size': iter_size,
++    'max_iter': 60000,
++    'snapshot': 40000,
++    'display': 10,
++    'average_loss': 10,
++    'type': "SGD",
++    'solver_mode': solver_mode,
++    'device_id': device_id,
++    'debug_info': False,
++    'snapshot_after_train': True,
++    # Test parameters
++    'test_iter': [test_iter],
++    'test_interval': 10000,
++    'eval_type': "detection",
++    'ap_version': "11point",
++    'test_initialization': False,
++    }
++
++# parameters for generating detection output.
++det_out_param = {
++    'num_classes': num_classes,
++    'share_location': share_location,
++    'background_label_id': background_label_id,
++    'nms_param': {'nms_threshold': 0.45, 'top_k': 400},
++    'save_output_param': {
++        'output_directory': output_result_dir,
++        'output_name_prefix': "comp4_det_test_",
++        'output_format': "VOC",
++        'label_map_file': label_map_file,
++        'name_size_file': name_size_file,
++        'num_test_image': num_test_image,
++        },
++    'keep_top_k': 200,
++    'confidence_threshold': 0.01,
++    'code_type': code_type,
++    }
++
++# parameters for evaluating detection results.
++det_eval_param = {
++    'num_classes': num_classes,
++    'background_label_id': background_label_id,
++    'overlap_threshold': 0.5,
++    'evaluate_difficult_gt': False,
++    'name_size_file': name_size_file,
++    }
++
++### Hopefully you don't need to change the following ###
++# Check file.
++check_if_exist(train_data)
++check_if_exist(test_data)
++check_if_exist(label_map_file)
++check_if_exist(pretrain_model)
++make_if_not_exist(save_dir)
++make_if_not_exist(job_dir)
++make_if_not_exist(snapshot_dir)
++
++# Create train net.
++net = caffe.NetSpec()
++net.data, net.label = CreateAnnotatedDataLayer(train_data, batch_size=batch_size_per_device,
++        train=True, output_label=True, label_map_file=label_map_file,
++        transform_param=train_transform_param, batch_sampler=batch_sampler)
++
++VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
++    dropout=False, freeze_layers=freeze_layers)
++
++AddExtraLayers(net, use_batchnorm)
++
++mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
++        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
++        aspect_ratios=aspect_ratios, normalizations=normalizations,
++        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
++        prior_variance=prior_variance, kernel_size=3, pad=1)
++
++# Create the MultiBoxLossLayer.
++name = "mbox_loss"
++mbox_layers.append(net.label)
++net[name] = L.MultiBoxLoss(*mbox_layers, multibox_loss_param=multibox_loss_param,
++        loss_param=loss_param, include=dict(phase=caffe_pb2.Phase.Value('TRAIN')),
++        propagate_down=[True, True, False, False])
++
++with open(train_net_file, 'w') as f:
++    print('name: "{}_train"'.format(model_name), file=f)
++    print(net.to_proto(), file=f)
++shutil.copy(train_net_file, job_dir)
++
++# Create test net.
++net = caffe.NetSpec()
++net.data, net.label = CreateAnnotatedDataLayer(test_data, batch_size=test_batch_size,
++        train=False, output_label=True, label_map_file=label_map_file,
++        transform_param=test_transform_param)
++
++VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
++    dropout=False, freeze_layers=freeze_layers)
++
++AddExtraLayers(net, use_batchnorm)
++
++mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
++        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
++        aspect_ratios=aspect_ratios, normalizations=normalizations,
++        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
++        prior_variance=prior_variance, kernel_size=3, pad=1)
++
++conf_name = "mbox_conf"
++if multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.SOFTMAX:
++  reshape_name = "{}_reshape".format(conf_name)
++  net[reshape_name] = L.Reshape(net[conf_name], shape=dict(dim=[0, -1, num_classes]))
++  softmax_name = "{}_softmax".format(conf_name)
++  net[softmax_name] = L.Softmax(net[reshape_name], axis=2)
++  flatten_name = "{}_flatten".format(conf_name)
++  net[flatten_name] = L.Flatten(net[softmax_name], axis=1)
++  mbox_layers[1] = net[flatten_name]
++elif multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.LOGISTIC:
++  sigmoid_name = "{}_sigmoid".format(conf_name)
++  net[sigmoid_name] = L.Sigmoid(net[conf_name])
++  mbox_layers[1] = net[sigmoid_name]
++
++net.detection_out = L.DetectionOutput(*mbox_layers,
++    detection_output_param=det_out_param,
++    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
++net.detection_eval = L.DetectionEvaluate(net.detection_out, net.label,
++    detection_evaluate_param=det_eval_param,
++    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
++
++with open(test_net_file, 'w') as f:
++    print('name: "{}_test"'.format(model_name), file=f)
++    print(net.to_proto(), file=f)
++shutil.copy(test_net_file, job_dir)
++
++# Create deploy net.
++# Remove the first and last layer from test net.
++deploy_net = net
++with open(deploy_net_file, 'w') as f:
++    net_param = deploy_net.to_proto()
++    # Remove the first (AnnotatedData) and last (DetectionEvaluate) layer from test net.
++    del net_param.layer[0]
++    del net_param.layer[-1]
++    net_param.name = '{}_deploy'.format(model_name)
++    net_param.input.extend(['data'])
++    net_param.input_shape.extend([
++        caffe_pb2.BlobShape(dim=[1, 3, resize_height, resize_width])])
++    print(net_param, file=f)
++shutil.copy(deploy_net_file, job_dir)
++
++# Create solver.
++solver = caffe_pb2.SolverParameter(
++        train_net=train_net_file,
++        test_net=[test_net_file],
++        snapshot_prefix=snapshot_prefix,
++        **solver_param)
++
++with open(solver_file, 'w') as f:
++    print(solver, file=f)
++shutil.copy(solver_file, job_dir)
++
++max_iter = 0
++# Find most recent snapshot.
++for file in os.listdir(snapshot_dir):
++  if file.endswith(".solverstate"):
++    basename = os.path.splitext(file)[0]
++    iter = int(basename.split("{}_iter_".format(model_name))[1])
++    if iter > max_iter:
++      max_iter = iter
++
++train_src_param = '--weights="{}" \\\n'.format(pretrain_model)
++if resume_training:
++  if max_iter > 0:
++    train_src_param = '--snapshot="{}_iter_{}.solverstate" \\\n'.format(snapshot_prefix, max_iter)
++
++if remove_old_models:
++  # Remove any snapshots smaller than max_iter.
++  for file in os.listdir(snapshot_dir):
++    if file.endswith(".solverstate"):
++      basename = os.path.splitext(file)[0]
++      iter = int(basename.split("{}_iter_".format(model_name))[1])
++      if max_iter > iter:
++        os.remove("{}/{}".format(snapshot_dir, file))
++    if file.endswith(".caffemodel"):
++      basename = os.path.splitext(file)[0]
++      iter = int(basename.split("{}_iter_".format(model_name))[1])
++      if max_iter > iter:
++        os.remove("{}/{}".format(snapshot_dir, file))
++
++# Create job file.
++with open(job_file, 'w') as f:
++  f.write('cd {}\n'.format(caffe_root))
++  f.write('./build/tools/caffe train \\\n')
++  f.write('--solver="{}" \\\n'.format(solver_file))
++  f.write(train_src_param)
++  if solver_param['solver_mode'] == P.Solver.GPU:
++    f.write('--gpu {} 2>&1 | tee {}/{}.log\n'.format(gpus, job_dir, model_name))
++  else:
++    f.write('2>&1 | tee {}/{}.log\n'.format(job_dir, model_name))
++
++# Copy the python script to job_dir.
++py_file = os.path.abspath(__file__)
++shutil.copy(py_file, job_dir)
++
++# Run the job.
++os.chmod(job_file, stat.S_IRWXU)
++if run_soon:
++  subprocess.call(job_file, shell=True)
+diff --git a/examples/ssd/ssd_pascal_resnet.py b/examples/ssd/ssd_pascal_resnet.py
+index 812f0d8..9e2694e 100644
+--- a/examples/ssd/ssd_pascal_resnet.py
++++ b/examples/ssd/ssd_pascal_resnet.py
+@@ -225,7 +225,6 @@ normalization_mode = P.Loss.VALID
+ code_type = P.PriorBox.CENTER_SIZE
+ neg_pos_ratio = 3.
+ loc_weight = (neg_pos_ratio + 1.) / 4.
+-mining_type = P.MultiBoxLoss.MAX_NEGATIVE
+ multibox_loss_param = {
+     'loc_loss_type': P.MultiBoxLoss.SMOOTH_L1,
+     'conf_loss_type': P.MultiBoxLoss.SOFTMAX,
+@@ -237,7 +236,7 @@ multibox_loss_param = {
+     'use_prior_for_matching': True,
+     'background_label_id': background_label_id,
+     'use_difficult_gt': train_on_diff_gt,
+-    'mining_type': mining_type,
++    'do_neg_mining': True,
+     'neg_pos_ratio': neg_pos_ratio,
+     'neg_overlap': 0.5,
+     'code_type': code_type,
+diff --git a/examples/ssd/ssd_pascal_speed.py b/examples/ssd/ssd_pascal_speed.py
+index 3a2d243..f3d9708 100644
+--- a/examples/ssd/ssd_pascal_speed.py
++++ b/examples/ssd/ssd_pascal_speed.py
+@@ -11,56 +11,31 @@ import subprocess
+ import sys
+ 
+ # Add extra layers on top of a "base" network (e.g. VGGNet or Inception).
+-def AddExtraLayers(net, use_batchnorm=True, lr_mult=1):
++def AddExtraLayers(net, use_batchnorm=True):
+     use_relu = True
+ 
+     # Add additional convolutional layers.
+-    # 19 x 19
+     from_layer = net.keys()[-1]
+-
+     # TODO(weiliu89): Construct the name using the last layer to avoid duplication.
+-    # 10 x 10
+     out_layer = "conv6_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 1, 0, 1,
+-        lr_mult=lr_mult)
++    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 1, 0, 1)
+ 
+     from_layer = out_layer
+     out_layer = "conv6_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 512, 3, 1, 2,
+-        lr_mult=lr_mult)
++    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 512, 3, 1, 2)
+ 
+-    # 5 x 5
+-    from_layer = out_layer
+-    out_layer = "conv7_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
++    for i in xrange(7, 9):
++      from_layer = out_layer
++      out_layer = "conv{}_1".format(i)
++      ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1)
+ 
+-    from_layer = out_layer
+-    out_layer = "conv7_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 1, 2,
+-      lr_mult=lr_mult)
++      from_layer = out_layer
++      out_layer = "conv{}_2".format(i)
++      ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 1, 2)
+ 
+-    # 3 x 3
+-    from_layer = out_layer
+-    out_layer = "conv8_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv8_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    # 1 x 1
+-    from_layer = out_layer
+-    out_layer = "conv9_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv9_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
++    # Add global pooling layer.
++    name = net.keys()[-1]
++    net.pool6 = L.Pooling(net[name], pool=P.Pooling.AVE, global_pooling=True)
+ 
+     return net
+ 
+@@ -186,23 +161,6 @@ train_transform_param = {
+                         P.Resize.LANCZOS4,
+                         ],
+                 },
+-        'distort_param': {
+-                'brightness_prob': 0.5,
+-                'brightness_delta': 32,
+-                'contrast_prob': 0.5,
+-                'contrast_lower': 0.5,
+-                'contrast_upper': 1.5,
+-                'hue_prob': 0.5,
+-                'hue_delta': 18,
+-                'saturation_prob': 0.5,
+-                'saturation_lower': 0.5,
+-                'saturation_upper': 1.5,
+-                'random_order_prob': 0.0,
+-                },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+         'emit_constraint': {
+             'emit_type': caffe_pb2.EmitConstraint.CENTER,
+             }
+@@ -221,7 +179,6 @@ test_transform_param = {
+ # If true, use batch norm for all newly added layers.
+ # Currently only the non batch norm version has been tested.
+ use_batchnorm = False
+-lr_mult = 1
+ # Use different initial learning rate.
+ if use_batchnorm:
+     base_lr = 0.0004
+@@ -280,8 +237,6 @@ background_label_id=0
+ train_on_diff_gt = True
+ normalization_mode = P.Loss.VALID
+ code_type = P.PriorBox.CENTER_SIZE
+-ignore_cross_boundary_bbox = False
+-mining_type = P.MultiBoxLoss.MAX_NEGATIVE
+ neg_pos_ratio = 3.
+ loc_weight = (neg_pos_ratio + 1.) / 4.
+ multibox_loss_param = {
+@@ -295,11 +250,10 @@ multibox_loss_param = {
+     'use_prior_for_matching': True,
+     'background_label_id': background_label_id,
+     'use_difficult_gt': train_on_diff_gt,
+-    'mining_type': mining_type,
++    'do_neg_mining': True,
+     'neg_pos_ratio': neg_pos_ratio,
+     'neg_overlap': 0.5,
+     'code_type': code_type,
+-    'ignore_cross_boundary_bbox': ignore_cross_boundary_bbox,
+     }
+ loss_param = {
+     'normalization': normalization_mode,
+@@ -313,11 +267,11 @@ min_dim = 300
+ # conv6_2 ==> 10 x 10
+ # conv7_2 ==> 5 x 5
+ # conv8_2 ==> 3 x 3
+-# conv9_2 ==> 1 x 1
+-mbox_source_layers = ['conv4_3', 'fc7', 'conv6_2', 'conv7_2', 'conv8_2', 'conv9_2']
++# pool6 ==> 1 x 1
++mbox_source_layers = ['conv4_3', 'fc7', 'conv6_2', 'conv7_2', 'conv8_2', 'pool6']
+ # in percent %
+ min_ratio = 20
+-max_ratio = 90
++max_ratio = 95
+ step = int(math.floor((max_ratio - min_ratio) / (len(mbox_source_layers) - 2)))
+ min_sizes = []
+ max_sizes = []
+@@ -325,9 +279,8 @@ for ratio in xrange(min_ratio, max_ratio + 1, step):
+   min_sizes.append(min_dim * ratio / 100.)
+   max_sizes.append(min_dim * (ratio + step) / 100.)
+ min_sizes = [min_dim * 10 / 100.] + min_sizes
+-max_sizes = [min_dim * 20 / 100.] + max_sizes
+-steps = [8, 16, 32, 64, 100, 300]
+-aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
++max_sizes = [[]] + max_sizes
++aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
+ # L2 normalize conv4_3.
+ normalizations = [20, -1, -1, -1, -1, -1]
+ # variance used to encode/decode prior bboxes.
+@@ -336,7 +289,7 @@ if code_type == P.PriorBox.CENTER_SIZE:
+ else:
+   prior_variance = [0.1]
+ flip = True
+-clip = False
++clip = True
+ 
+ # Solver parameters.
+ # Defining which GPUs to use.
+@@ -366,6 +319,9 @@ elif normalization_mode == P.Loss.FULL:
+   # TODO(weiliu89): Estimate the exact # of priors.
+   base_lr *= 2000.
+ 
++# Which layers to freeze (no backward) during training.
++freeze_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2']
++
+ # Evaluate on whole test set.
+ num_test_image = 4952
+ test_batch_size = 8
+@@ -377,8 +333,8 @@ solver_param = {
+     # Train parameters
+     'base_lr': base_lr,
+     'weight_decay': 0.0005,
+-    'lr_policy': "multistep",
+-    'stepvalue': [80000, 100000, 120000],
++    'lr_policy': "step",
++    'stepsize': 40000,
+     'gamma': 0.1,
+     'momentum': 0.9,
+     'iter_size': iter_size,
+@@ -443,15 +399,15 @@ net.data, net.label = CreateAnnotatedDataLayer(train_data, batch_size=batch_size
+         transform_param=train_transform_param, batch_sampler=batch_sampler)
+ 
+ VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
++    dropout=False, freeze_layers=freeze_layers)
+ 
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
++AddExtraLayers(net, use_batchnorm)
+ 
+ mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+         use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
++        aspect_ratios=aspect_ratios, normalizations=normalizations,
+         num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
++        prior_variance=prior_variance, kernel_size=3, pad=1)
+ 
+ # Create the MultiBoxLossLayer.
+ name = "mbox_loss"
+@@ -472,15 +428,15 @@ net.data = CreateAnnotatedDataLayer(test_data, batch_size=test_batch_size,
+         transform_param=test_transform_param)
+ 
+ VGGNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
++    dropout=False, freeze_layers=freeze_layers)
+ 
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
++AddExtraLayers(net, use_batchnorm)
+ 
+ mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+         use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
++        aspect_ratios=aspect_ratios, normalizations=normalizations,
+         num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
++        prior_variance=prior_variance, kernel_size=3, pad=1)
+ 
+ conf_name = "mbox_conf"
+ if multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.SOFTMAX:
+diff --git a/examples/ssd/ssd_pascal_zf.py b/examples/ssd/ssd_pascal_zf.py
+deleted file mode 100644
+index 516860d..0000000
+--- a/examples/ssd/ssd_pascal_zf.py
++++ /dev/null
+@@ -1,578 +0,0 @@
+-'''
+-Before running this script, you should download the fully convolutional reduced (atrous) ZFNet at:
+-  http://cs.unc.edu/~wliu/projects/SSD/ZF_conv_reduced.caffemodel
+-By default, we assume the model is stored in `$CAFFE_ROOT/models/ZFNet/`
+-'''
+-from __future__ import print_function
+-import caffe
+-from caffe.model_libs import *
+-from google.protobuf import text_format
+-
+-import math
+-import os
+-import shutil
+-import stat
+-import subprocess
+-import sys
+-
+-# Add extra layers on top of a "base" network (e.g. VGGNet or Inception).
+-def AddExtraLayers(net, use_batchnorm=True, lr_mult=1):
+-    use_relu = True
+-
+-    # Add additional convolutional layers.
+-    # 19 x 19
+-    from_layer = net.keys()[-1]
+-
+-    # TODO(weiliu89): Construct the name using the last layer to avoid duplication.
+-    # 10 x 10
+-    out_layer = "conv6_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 1, 0, 1,
+-        lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv6_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 512, 3, 1, 2,
+-        lr_mult=lr_mult)
+-
+-    # 5 x 5
+-    from_layer = out_layer
+-    out_layer = "conv7_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv7_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 1, 2,
+-      lr_mult=lr_mult)
+-
+-    # 3 x 3
+-    from_layer = out_layer
+-    out_layer = "conv8_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv8_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    # 1 x 1
+-    from_layer = out_layer
+-    out_layer = "conv9_1"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 128, 1, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    from_layer = out_layer
+-    out_layer = "conv9_2"
+-    ConvBNLayer(net, from_layer, out_layer, use_batchnorm, use_relu, 256, 3, 0, 1,
+-      lr_mult=lr_mult)
+-
+-    return net
+-
+-
+-### Modify the following parameters accordingly ###
+-# The directory which contains the caffe code.
+-# We assume you are running the script at the CAFFE_ROOT.
+-caffe_root = os.getcwd()
+-
+-# Set true if you want to start training right after generating all files.
+-run_soon = True
+-# Set true if you want to load from most recently saved snapshot.
+-# Otherwise, we will load from the pretrain_model defined below.
+-resume_training = True
+-# If true, Remove old model files.
+-remove_old_models = False
+-
+-# The database file for training data. Created by data/VOC0712/create_data.sh
+-train_data = "examples/VOC0712/VOC0712_trainval_lmdb"
+-# The database file for testing data. Created by data/VOC0712/create_data.sh
+-test_data = "examples/VOC0712/VOC0712_test_lmdb"
+-# Specify the batch sampler.
+-resize_width = 300
+-resize_height = 300
+-resize = "{}x{}".format(resize_width, resize_height)
+-batch_sampler = [
+-        {
+-                'sampler': {
+-                        },
+-                'max_trials': 1,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.1,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.3,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.5,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.7,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'min_jaccard_overlap': 0.9,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        {
+-                'sampler': {
+-                        'min_scale': 0.3,
+-                        'max_scale': 1.0,
+-                        'min_aspect_ratio': 0.5,
+-                        'max_aspect_ratio': 2.0,
+-                        },
+-                'sample_constraint': {
+-                        'max_jaccard_overlap': 1.0,
+-                        },
+-                'max_trials': 50,
+-                'max_sample': 1,
+-        },
+-        ]
+-train_transform_param = {
+-        'mirror': True,
+-        'mean_value': [104, 117, 123],
+-        'resize_param': {
+-                'prob': 1,
+-                'resize_mode': P.Resize.WARP,
+-                'height': resize_height,
+-                'width': resize_width,
+-                'interp_mode': [
+-                        P.Resize.LINEAR,
+-                        P.Resize.AREA,
+-                        P.Resize.NEAREST,
+-                        P.Resize.CUBIC,
+-                        P.Resize.LANCZOS4,
+-                        ],
+-                },
+-        'distort_param': {
+-                'brightness_prob': 0.5,
+-                'brightness_delta': 32,
+-                'contrast_prob': 0.5,
+-                'contrast_lower': 0.5,
+-                'contrast_upper': 1.5,
+-                'hue_prob': 0.5,
+-                'hue_delta': 18,
+-                'saturation_prob': 0.5,
+-                'saturation_lower': 0.5,
+-                'saturation_upper': 1.5,
+-                'random_order_prob': 0.0,
+-                },
+-        'expand_param': {
+-                'prob': 0.5,
+-                'max_expand_ratio': 4.0,
+-                },
+-        'emit_constraint': {
+-            'emit_type': caffe_pb2.EmitConstraint.CENTER,
+-            }
+-        }
+-test_transform_param = {
+-        'mean_value': [104, 117, 123],
+-        'resize_param': {
+-                'prob': 1,
+-                'resize_mode': P.Resize.WARP,
+-                'height': resize_height,
+-                'width': resize_width,
+-                'interp_mode': [P.Resize.LINEAR],
+-                },
+-        }
+-
+-# If true, use batch norm for all newly added layers.
+-# Currently only the non batch norm version has been tested.
+-use_batchnorm = False
+-lr_mult = 1
+-# Use different initial learning rate.
+-if use_batchnorm:
+-    base_lr = 0.0004
+-else:
+-    # A learning rate for batch_size = 1, num_gpus = 1.
+-    base_lr = 0.00004
+-
+-# Modify the job name if you want.
+-job_name = "SSD_{}".format(resize)
+-# The name of the model. Modify it if you want.
+-model_name = "ZF_VOC0712_{}".format(job_name)
+-
+-# Directory which stores the model .prototxt file.
+-save_dir = "models/ZFNet/VOC0712/{}".format(job_name)
+-# Directory which stores the snapshot of models.
+-snapshot_dir = "models/ZFNet/VOC0712/{}".format(job_name)
+-# Directory which stores the job script and log file.
+-job_dir = "jobs/ZFNet/VOC0712/{}".format(job_name)
+-# Directory which stores the detection results.
+-output_result_dir = "{}/data/VOCdevkit/results/VOC2007/{}/Main".format(os.environ['HOME'], job_name)
+-
+-# model definition files.
+-train_net_file = "{}/train.prototxt".format(save_dir)
+-test_net_file = "{}/test.prototxt".format(save_dir)
+-deploy_net_file = "{}/deploy.prototxt".format(save_dir)
+-solver_file = "{}/solver.prototxt".format(save_dir)
+-# snapshot prefix.
+-snapshot_prefix = "{}/{}".format(snapshot_dir, model_name)
+-# job script path.
+-job_file = "{}/{}.sh".format(job_dir, model_name)
+-
+-# Stores the test image names and sizes. Created by data/VOC0712/create_list.sh
+-name_size_file = "data/VOC0712/test_name_size.txt"
+-# The pretrained model. We use the Fully convolutional reduced (atrous) ZFNet.
+-pretrain_model = "models/ZFNet/ZF_conv_reduced.caffemodel"
+-# Stores LabelMapItem.
+-label_map_file = "data/VOC0712/labelmap_voc.prototxt"
+-
+-# MultiBoxLoss parameters.
+-num_classes = 21
+-share_location = True
+-background_label_id=0
+-train_on_diff_gt = True
+-normalization_mode = P.Loss.VALID
+-code_type = P.PriorBox.CENTER_SIZE
+-ignore_cross_boundary_bbox = False
+-mining_type = P.MultiBoxLoss.MAX_NEGATIVE
+-neg_pos_ratio = 3.
+-loc_weight = (neg_pos_ratio + 1.) / 4.
+-multibox_loss_param = {
+-    'loc_loss_type': P.MultiBoxLoss.SMOOTH_L1,
+-    'conf_loss_type': P.MultiBoxLoss.SOFTMAX,
+-    'loc_weight': loc_weight,
+-    'num_classes': num_classes,
+-    'share_location': share_location,
+-    'match_type': P.MultiBoxLoss.PER_PREDICTION,
+-    'overlap_threshold': 0.5,
+-    'use_prior_for_matching': True,
+-    'background_label_id': background_label_id,
+-    'use_difficult_gt': train_on_diff_gt,
+-    'mining_type': mining_type,
+-    'neg_pos_ratio': neg_pos_ratio,
+-    'neg_overlap': 0.5,
+-    'code_type': code_type,
+-    'ignore_cross_boundary_bbox': ignore_cross_boundary_bbox,
+-    }
+-loss_param = {
+-    'normalization': normalization_mode,
+-    }
+-
+-# parameters for generating priors.
+-# minimum dimension of input image
+-min_dim = 300
+-# conv2 ==> 38 x 38
+-# fc7 ==> 19 x 19
+-# conv6_2 ==> 10 x 10
+-# conv7_2 ==> 5 x 5
+-# conv8_2 ==> 3 x 3
+-# conv9_2 ==> 1 x 1
+-mbox_source_layers = ['conv2', 'fc7', 'conv6_2', 'conv7_2', 'conv8_2', 'conv9_2']
+-# in percent %
+-min_ratio = 20
+-max_ratio = 90
+-step = int(math.floor((max_ratio - min_ratio) / (len(mbox_source_layers) - 2)))
+-min_sizes = []
+-max_sizes = []
+-for ratio in xrange(min_ratio, max_ratio + 1, step):
+-  min_sizes.append(min_dim * ratio / 100.)
+-  max_sizes.append(min_dim * (ratio + step) / 100.)
+-min_sizes = [min_dim * 10 / 100.] + min_sizes
+-max_sizes = [min_dim * 20 / 100.] + max_sizes
+-steps = [8, 16, 32, 64, 100, 300]
+-aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
+-# L2 normalize conv2.
+-normalizations = [20, -1, -1, -1, -1, -1]
+-# variance used to encode/decode prior bboxes.
+-if code_type == P.PriorBox.CENTER_SIZE:
+-  prior_variance = [0.1, 0.1, 0.2, 0.2]
+-else:
+-  prior_variance = [0.1]
+-flip = True
+-clip = False
+-
+-# Solver parameters.
+-# Defining which GPUs to use.
+-gpus = "0,1,2,3"
+-gpulist = gpus.split(",")
+-num_gpus = len(gpulist)
+-
+-# Divide the mini-batch to different GPUs.
+-batch_size = 32
+-accum_batch_size = 32
+-iter_size = accum_batch_size / batch_size
+-solver_mode = P.Solver.CPU
+-device_id = 0
+-batch_size_per_device = batch_size
+-if num_gpus > 0:
+-  batch_size_per_device = int(math.ceil(float(batch_size) / num_gpus))
+-  iter_size = int(math.ceil(float(accum_batch_size) / (batch_size_per_device * num_gpus)))
+-  solver_mode = P.Solver.GPU
+-  device_id = int(gpulist[0])
+-
+-if normalization_mode == P.Loss.NONE:
+-  base_lr /= batch_size_per_device
+-elif normalization_mode == P.Loss.VALID:
+-  base_lr *= 25. / loc_weight
+-elif normalization_mode == P.Loss.FULL:
+-  # Roughly there are 2000 prior bboxes per image.
+-  # TODO(weiliu89): Estimate the exact # of priors.
+-  base_lr *= 2000.
+-
+-# Evaluate on whole test set.
+-num_test_image = 4952
+-test_batch_size = 8
+-# Ideally test_batch_size should be divisible by num_test_image,
+-# otherwise mAP will be slightly off the true value.
+-test_iter = int(math.ceil(float(num_test_image) / test_batch_size))
+-
+-solver_param = {
+-    # Train parameters
+-    'base_lr': base_lr,
+-    'weight_decay': 0.0005,
+-    'lr_policy': "multistep",
+-    'stepvalue': [80000, 100000, 120000],
+-    'gamma': 0.1,
+-    'momentum': 0.9,
+-    'iter_size': iter_size,
+-    'max_iter': 120000,
+-    'snapshot': 80000,
+-    'display': 10,
+-    'average_loss': 10,
+-    'type': "SGD",
+-    'solver_mode': solver_mode,
+-    'device_id': device_id,
+-    'debug_info': False,
+-    'snapshot_after_train': True,
+-    # Test parameters
+-    'test_iter': [test_iter],
+-    'test_interval': 10000,
+-    'eval_type': "detection",
+-    'ap_version': "11point",
+-    'test_initialization': False,
+-    }
+-
+-# parameters for generating detection output.
+-det_out_param = {
+-    'num_classes': num_classes,
+-    'share_location': share_location,
+-    'background_label_id': background_label_id,
+-    'nms_param': {'nms_threshold': 0.45, 'top_k': 400},
+-    'save_output_param': {
+-        'output_directory': output_result_dir,
+-        'output_name_prefix': "comp4_det_test_",
+-        'output_format': "VOC",
+-        'label_map_file': label_map_file,
+-        'name_size_file': name_size_file,
+-        'num_test_image': num_test_image,
+-        },
+-    'keep_top_k': 200,
+-    'confidence_threshold': 0.01,
+-    'code_type': code_type,
+-    }
+-
+-# parameters for evaluating detection results.
+-det_eval_param = {
+-    'num_classes': num_classes,
+-    'background_label_id': background_label_id,
+-    'overlap_threshold': 0.5,
+-    'evaluate_difficult_gt': False,
+-    'name_size_file': name_size_file,
+-    }
+-
+-### Hopefully you don't need to change the following ###
+-# Check file.
+-check_if_exist(train_data)
+-check_if_exist(test_data)
+-check_if_exist(label_map_file)
+-check_if_exist(pretrain_model)
+-make_if_not_exist(save_dir)
+-make_if_not_exist(job_dir)
+-make_if_not_exist(snapshot_dir)
+-
+-# Create train net.
+-net = caffe.NetSpec()
+-net.data, net.label = CreateAnnotatedDataLayer(train_data, batch_size=batch_size_per_device,
+-        train=True, output_label=True, label_map_file=label_map_file,
+-        transform_param=train_transform_param, batch_sampler=batch_sampler)
+-
+-ZFNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
+-
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
+-
+-mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+-        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
+-        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
+-
+-# Create the MultiBoxLossLayer.
+-name = "mbox_loss"
+-mbox_layers.append(net.label)
+-net[name] = L.MultiBoxLoss(*mbox_layers, multibox_loss_param=multibox_loss_param,
+-        loss_param=loss_param, include=dict(phase=caffe_pb2.Phase.Value('TRAIN')),
+-        propagate_down=[True, True, False, False])
+-
+-with open(train_net_file, 'w') as f:
+-    print('name: "{}_train"'.format(model_name), file=f)
+-    print(net.to_proto(), file=f)
+-shutil.copy(train_net_file, job_dir)
+-
+-# Create test net.
+-net = caffe.NetSpec()
+-net.data, net.label = CreateAnnotatedDataLayer(test_data, batch_size=test_batch_size,
+-        train=False, output_label=True, label_map_file=label_map_file,
+-        transform_param=test_transform_param)
+-
+-ZFNetBody(net, from_layer='data', fully_conv=True, reduced=True, dilated=True,
+-    dropout=False)
+-
+-AddExtraLayers(net, use_batchnorm, lr_mult=lr_mult)
+-
+-mbox_layers = CreateMultiBoxHead(net, data_layer='data', from_layers=mbox_source_layers,
+-        use_batchnorm=use_batchnorm, min_sizes=min_sizes, max_sizes=max_sizes,
+-        aspect_ratios=aspect_ratios, steps=steps, normalizations=normalizations,
+-        num_classes=num_classes, share_location=share_location, flip=flip, clip=clip,
+-        prior_variance=prior_variance, kernel_size=3, pad=1, lr_mult=lr_mult)
+-
+-conf_name = "mbox_conf"
+-if multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.SOFTMAX:
+-  reshape_name = "{}_reshape".format(conf_name)
+-  net[reshape_name] = L.Reshape(net[conf_name], shape=dict(dim=[0, -1, num_classes]))
+-  softmax_name = "{}_softmax".format(conf_name)
+-  net[softmax_name] = L.Softmax(net[reshape_name], axis=2)
+-  flatten_name = "{}_flatten".format(conf_name)
+-  net[flatten_name] = L.Flatten(net[softmax_name], axis=1)
+-  mbox_layers[1] = net[flatten_name]
+-elif multibox_loss_param["conf_loss_type"] == P.MultiBoxLoss.LOGISTIC:
+-  sigmoid_name = "{}_sigmoid".format(conf_name)
+-  net[sigmoid_name] = L.Sigmoid(net[conf_name])
+-  mbox_layers[1] = net[sigmoid_name]
+-
+-net.detection_out = L.DetectionOutput(*mbox_layers,
+-    detection_output_param=det_out_param,
+-    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
+-net.detection_eval = L.DetectionEvaluate(net.detection_out, net.label,
+-    detection_evaluate_param=det_eval_param,
+-    include=dict(phase=caffe_pb2.Phase.Value('TEST')))
+-
+-with open(test_net_file, 'w') as f:
+-    print('name: "{}_test"'.format(model_name), file=f)
+-    print(net.to_proto(), file=f)
+-shutil.copy(test_net_file, job_dir)
+-
+-# Create deploy net.
+-# Remove the first and last layer from test net.
+-deploy_net = net
+-with open(deploy_net_file, 'w') as f:
+-    net_param = deploy_net.to_proto()
+-    # Remove the first (AnnotatedData) and last (DetectionEvaluate) layer from test net.
+-    del net_param.layer[0]
+-    del net_param.layer[-1]
+-    net_param.name = '{}_deploy'.format(model_name)
+-    net_param.input.extend(['data'])
+-    net_param.input_shape.extend([
+-        caffe_pb2.BlobShape(dim=[1, 3, resize_height, resize_width])])
+-    print(net_param, file=f)
+-shutil.copy(deploy_net_file, job_dir)
+-
+-# Create solver.
+-solver = caffe_pb2.SolverParameter(
+-        train_net=train_net_file,
+-        test_net=[test_net_file],
+-        snapshot_prefix=snapshot_prefix,
+-        **solver_param)
+-
+-with open(solver_file, 'w') as f:
+-    print(solver, file=f)
+-shutil.copy(solver_file, job_dir)
+-
+-max_iter = 0
+-# Find most recent snapshot.
+-for file in os.listdir(snapshot_dir):
+-  if file.endswith(".solverstate"):
+-    basename = os.path.splitext(file)[0]
+-    iter = int(basename.split("{}_iter_".format(model_name))[1])
+-    if iter > max_iter:
+-      max_iter = iter
+-
+-train_src_param = '--weights="{}" \\\n'.format(pretrain_model)
+-if resume_training:
+-  if max_iter > 0:
+-    train_src_param = '--snapshot="{}_iter_{}.solverstate" \\\n'.format(snapshot_prefix, max_iter)
+-
+-if remove_old_models:
+-  # Remove any snapshots smaller than max_iter.
+-  for file in os.listdir(snapshot_dir):
+-    if file.endswith(".solverstate"):
+-      basename = os.path.splitext(file)[0]
+-      iter = int(basename.split("{}_iter_".format(model_name))[1])
+-      if max_iter > iter:
+-        os.remove("{}/{}".format(snapshot_dir, file))
+-    if file.endswith(".caffemodel"):
+-      basename = os.path.splitext(file)[0]
+-      iter = int(basename.split("{}_iter_".format(model_name))[1])
+-      if max_iter > iter:
+-        os.remove("{}/{}".format(snapshot_dir, file))
+-
+-# Create job file.
+-with open(job_file, 'w') as f:
+-  f.write('cd {}\n'.format(caffe_root))
+-  f.write('./build/tools/caffe train \\\n')
+-  f.write('--solver="{}" \\\n'.format(solver_file))
+-  f.write(train_src_param)
+-  if solver_param['solver_mode'] == P.Solver.GPU:
+-    f.write('--gpu {} 2>&1 | tee {}/{}.log\n'.format(gpus, job_dir, model_name))
+-  else:
+-    f.write('2>&1 | tee {}/{}.log\n'.format(job_dir, model_name))
+-
+-# Copy the python script to job_dir.
+-py_file = os.path.abspath(__file__)
+-shutil.copy(py_file, job_dir)
+-
+-# Run the job.
+-os.chmod(job_file, stat.S_IRWXU)
+-if run_soon:
+-  subprocess.call(job_file, shell=True)
+diff --git a/include/caffe/util/cudnn.hpp b/include/caffe/util/cudnn.hpp
+index 0760d8c..a7d8dbb 100644
+--- a/include/caffe/util/cudnn.hpp
++++ b/include/caffe/util/cudnn.hpp
+@@ -41,10 +41,6 @@ inline const char* cudnnGetErrorString(cudnnStatus_t status) {
+       return "CUDNN_STATUS_NOT_SUPPORTED";
+     case CUDNN_STATUS_LICENSE_ERROR:
+       return "CUDNN_STATUS_LICENSE_ERROR";
+-#if CUDNN_VERSION_MIN(6, 0, 0)
+-    case CUDNN_STATUS_RUNTIME_PREREQUISITE_MISSING:
+-      return "CUDNN_STATUS_RUNTIME_PREREQUISITE_MISSING";
+-#endif
+   }
+   return "Unknown cudnn status";
+ }
+@@ -113,14 +109,8 @@ template <typename Dtype>
+ inline void setConvolutionDesc(cudnnConvolutionDescriptor_t* conv,
+     cudnnTensorDescriptor_t bottom, cudnnFilterDescriptor_t filter,
+     int pad_h, int pad_w, int stride_h, int stride_w) {
+-#if CUDNN_VERSION_MIN(6, 0, 0)
+-  CUDNN_CHECK(cudnnSetConvolution2dDescriptor(*conv,
+-      pad_h, pad_w, stride_h, stride_w, 1, 1, CUDNN_CROSS_CORRELATION,
+-      dataType<Dtype>::type));
+-#else
+   CUDNN_CHECK(cudnnSetConvolution2dDescriptor(*conv,
+       pad_h, pad_w, stride_h, stride_w, 1, 1, CUDNN_CROSS_CORRELATION));
+-#endif
+ }
+ 
+ template <typename Dtype>
+diff --git a/include/caffe/util/nccl.hpp b/include/caffe/util/nccl.hpp
+new file mode 100644
+index 0000000..e01fb74
+--- /dev/null
++++ b/include/caffe/util/nccl.hpp
+@@ -0,0 +1,37 @@
++#ifndef CAFFE_UTIL_NCCL_H_
++#define CAFFE_UTIL_NCCL_H_
++#ifdef USE_NCCL
++
++#include <nccl.h>
++
++#include "caffe/common.hpp"
++
++#define NCCL_CHECK(condition) \
++{ \
++  ncclResult_t result = condition; \
++  CHECK_EQ(result, ncclSuccess) << " " \
++    << ncclGetErrorString(result); \
++}
++
++namespace caffe {
++
++namespace nccl {
++
++template <typename Dtype> class dataType;
++
++template<> class dataType<float> {
++ public:
++  static const ncclDataType_t type = ncclFloat;
++};
++template<> class dataType<double> {
++ public:
++  static const ncclDataType_t type = ncclDouble;
++};
++
++}  // namespace nccl
++
++}  // namespace caffe
++
++#endif  // end USE_NCCL
++
++#endif  // CAFFE_UTIL_NCCL_H_
+diff --git a/models/bvlc_googlenet/train_val.prototxt b/models/bvlc_googlenet/train_val.prototxt
+old mode 100644
+new mode 100755
+diff --git a/python/caffe/model_libs.py b/python/caffe/model_libs.py
+index 84c8bf2..f680458 100644
+--- a/python/caffe/model_libs.py
++++ b/python/caffe/model_libs.py
+@@ -216,95 +216,6 @@ def CreateAnnotatedDataLayer(source, batch_size=32, backend=P.Data.LMDB,
+         ntop=ntop, **kwargs)
+ 
+ 
+-def ZFNetBody(net, from_layer, need_fc=True, fully_conv=False, reduced=False,
+-        dilated=False, dropout=True, need_fc8=False, freeze_layers=[]):
+-    kwargs = {
+-            'param': [dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)],
+-            'weight_filler': dict(type='xavier'),
+-            'bias_filler': dict(type='constant', value=0)}
+-
+-    assert from_layer in net.keys()
+-    net.conv1 = L.Convolution(net[from_layer], num_output=96, pad=3, kernel_size=7, stride=2, **kwargs)
+-    net.relu1 = L.ReLU(net.conv1, in_place=True)
+-
+-    net.norm1 = L.LRN(net.relu1, local_size=3, alpha=0.00005, beta=0.75,
+-            norm_region=P.LRN.WITHIN_CHANNEL, engine=P.LRN.CAFFE)
+-
+-    net.pool1 = L.Pooling(net.norm1, pool=P.Pooling.MAX, pad=1, kernel_size=3, stride=2)
+-
+-    net.conv2 = L.Convolution(net.pool1, num_output=256, pad=2, kernel_size=5, stride=2, **kwargs)
+-    net.relu2 = L.ReLU(net.conv2, in_place=True)
+-
+-    net.norm2 = L.LRN(net.relu2, local_size=3, alpha=0.00005, beta=0.75,
+-            norm_region=P.LRN.WITHIN_CHANNEL, engine=P.LRN.CAFFE)
+-
+-    net.pool2 = L.Pooling(net.norm2, pool=P.Pooling.MAX, pad=1, kernel_size=3, stride=2)
+-
+-    net.conv3 = L.Convolution(net.pool2, num_output=384, pad=1, kernel_size=3, **kwargs)
+-    net.relu3 = L.ReLU(net.conv3, in_place=True)
+-    net.conv4 = L.Convolution(net.relu3, num_output=384, pad=1, kernel_size=3, **kwargs)
+-    net.relu4 = L.ReLU(net.conv4, in_place=True)
+-    net.conv5 = L.Convolution(net.relu4, num_output=256, pad=1, kernel_size=3, **kwargs)
+-    net.relu5 = L.ReLU(net.conv5, in_place=True)
+-
+-    if need_fc:
+-        if dilated:
+-            name = 'pool5'
+-            net[name] = L.Pooling(net.relu5, pool=P.Pooling.MAX, pad=1, kernel_size=3, stride=1)
+-        else:
+-            name = 'pool5'
+-            net[name] = L.Pooling(net.relu5, pool=P.Pooling.MAX, pad=1, kernel_size=3, stride=2)
+-
+-        if fully_conv:
+-            if dilated:
+-                if reduced:
+-                    net.fc6 = L.Convolution(net[name], num_output=1024, pad=5, kernel_size=3, dilation=5, **kwargs)
+-                else:
+-                    net.fc6 = L.Convolution(net[name], num_output=4096, pad=5, kernel_size=6, dilation=2, **kwargs)
+-            else:
+-                if reduced:
+-                    net.fc6 = L.Convolution(net[name], num_output=1024, pad=2, kernel_size=3, dilation=2,  **kwargs)
+-                else:
+-                    net.fc6 = L.Convolution(net[name], num_output=4096, pad=2, kernel_size=6, **kwargs)
+-
+-            net.relu6 = L.ReLU(net.fc6, in_place=True)
+-            if dropout:
+-                net.drop6 = L.Dropout(net.relu6, dropout_ratio=0.5, in_place=True)
+-
+-            if reduced:
+-                net.fc7 = L.Convolution(net.relu6, num_output=1024, kernel_size=1, **kwargs)
+-            else:
+-                net.fc7 = L.Convolution(net.relu6, num_output=4096, kernel_size=1, **kwargs)
+-            net.relu7 = L.ReLU(net.fc7, in_place=True)
+-            if dropout:
+-                net.drop7 = L.Dropout(net.relu7, dropout_ratio=0.5, in_place=True)
+-        else:
+-            net.fc6 = L.InnerProduct(net.pool5, num_output=4096)
+-            net.relu6 = L.ReLU(net.fc6, in_place=True)
+-            if dropout:
+-                net.drop6 = L.Dropout(net.relu6, dropout_ratio=0.5, in_place=True)
+-            net.fc7 = L.InnerProduct(net.relu6, num_output=4096)
+-            net.relu7 = L.ReLU(net.fc7, in_place=True)
+-            if dropout:
+-                net.drop7 = L.Dropout(net.relu7, dropout_ratio=0.5, in_place=True)
+-    if need_fc8:
+-        from_layer = net.keys()[-1]
+-        if fully_conv:
+-            net.fc8 = L.Convolution(net[from_layer], num_output=1000, kernel_size=1, **kwargs)
+-        else:
+-            net.fc8 = L.InnerProduct(net[from_layer], num_output=1000)
+-        net.prob = L.Softmax(net.fc8)
+-
+-    # Update freeze layers.
+-    kwargs['param'] = [dict(lr_mult=0, decay_mult=0), dict(lr_mult=0, decay_mult=0)]
+-    layers = net.keys()
+-    for freeze_layer in freeze_layers:
+-        if freeze_layer in layers:
+-            net.update(freeze_layer, kwargs)
+-
+-    return net
+-
+-
+ def VGGNetBody(net, from_layer, need_fc=True, fully_conv=False, reduced=False,
+         dilated=False, nopool=False, dropout=True, freeze_layers=[], dilate_pool4=False):
+     kwargs = {
+diff --git a/python/caffe/test/test_draw.py b/python/caffe/test/test_draw.py
+new file mode 100644
+index 0000000..835bb5d
+--- /dev/null
++++ b/python/caffe/test/test_draw.py
+@@ -0,0 +1,37 @@
++import os
++import unittest
++
++from google.protobuf import text_format
++
++import caffe.draw
++from caffe.proto import caffe_pb2
++
++def getFilenames():
++    """Yields files in the source tree which are Net prototxts."""
++    result = []
++
++    root_dir = os.path.abspath(os.path.join(
++        os.path.dirname(__file__), '..', '..', '..'))
++    assert os.path.exists(root_dir)
++
++    for dirname in ('models', 'examples'):
++        dirname = os.path.join(root_dir, dirname)
++        assert os.path.exists(dirname)
++        for cwd, _, filenames in os.walk(dirname):
++            for filename in filenames:
++                filename = os.path.join(cwd, filename)
++                if filename.endswith('.prototxt') and 'solver' not in filename:
++                    yield os.path.join(dirname, filename)
++
++
++class TestDraw(unittest.TestCase):
++    def test_draw_net(self):
++        for filename in getFilenames():
++            net = caffe_pb2.NetParameter()
++            with open(filename) as infile:
++                text_format.Merge(infile.read(), net)
++            caffe.draw.draw_net(net, 'LR')
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/python/caffe/test/test_nccl.py b/python/caffe/test/test_nccl.py
+new file mode 100644
+index 0000000..127a933
+--- /dev/null
++++ b/python/caffe/test/test_nccl.py
+@@ -0,0 +1,19 @@
++import sys
++import unittest
++
++import caffe
++
++
++class TestNCCL(unittest.TestCase):
++
++    def test_newuid(self):
++        """
++        Test that NCCL uids are of the proper type
++        according to python version
++        """
++        if caffe.has_nccl():
++            uid = caffe.NCCL.new_uid()
++            if sys.version_info.major >= 3:
++                self.assertTrue(isinstance(uid, bytes))
++            else:
++                self.assertTrue(isinstance(uid, str))
+diff --git a/python/requirements.txt b/python/requirements.txt
+index f611bf8..e7d89e6 100644
+--- a/python/requirements.txt
++++ b/python/requirements.txt
+@@ -9,9 +9,9 @@ leveldb>=0.191
+ networkx>=1.8.1
+ nose>=1.3.0
+ pandas>=0.12.0
+-python-dateutil>=2.6.0
++python-dateutil>=1.4,<2
+ protobuf>=2.5.0
+ python-gflags>=2.0
+ pyyaml>=3.10
+ Pillow>=2.3.0
+-six>=1.1.0
++six>=1.1.0
+\ No newline at end of file
+diff --git a/python/train.py b/python/train.py
+new file mode 100644
+index 0000000..5897f5d
+--- /dev/null
++++ b/python/train.py
+@@ -0,0 +1,100 @@
++#!/usr/bin/env python
++"""
++Trains a model using one or more GPUs.
++"""
++from multiprocessing import Process
++
++import caffe
++
++
++def train(
++        solver,  # solver proto definition
++        snapshot,  # solver snapshot to restore
++        gpus,  # list of device ids
++        timing=False,  # show timing info for compute and communications
++):
++    # NCCL uses a uid to identify a session
++    uid = caffe.NCCL.new_uid()
++
++    caffe.init_log()
++    caffe.log('Using devices %s' % str(gpus))
++
++    procs = []
++    for rank in range(len(gpus)):
++        p = Process(target=solve,
++                    args=(solver, snapshot, gpus, timing, uid, rank))
++        p.daemon = True
++        p.start()
++        procs.append(p)
++    for p in procs:
++        p.join()
++
++
++def time(solver, nccl):
++    fprop = []
++    bprop = []
++    total = caffe.Timer()
++    allrd = caffe.Timer()
++    for _ in range(len(solver.net.layers)):
++        fprop.append(caffe.Timer())
++        bprop.append(caffe.Timer())
++    display = solver.param.display
++
++    def show_time():
++        if solver.iter % display == 0:
++            s = '\n'
++            for i in range(len(solver.net.layers)):
++                s += 'forw %3d %8s ' % (i, solver.net._layer_names[i])
++                s += ': %.2f\n' % fprop[i].ms
++            for i in range(len(solver.net.layers) - 1, -1, -1):
++                s += 'back %3d %8s ' % (i, solver.net._layer_names[i])
++                s += ': %.2f\n' % bprop[i].ms
++            s += 'solver total: %.2f\n' % total.ms
++            s += 'allreduce: %.2f\n' % allrd.ms
++            caffe.log(s)
++
++    solver.net.before_forward(lambda layer: fprop[layer].start())
++    solver.net.after_forward(lambda layer: fprop[layer].stop())
++    solver.net.before_backward(lambda layer: bprop[layer].start())
++    solver.net.after_backward(lambda layer: bprop[layer].stop())
++    solver.add_callback(lambda: total.start(), lambda: (total.stop(), allrd.start()))
++    solver.add_callback(nccl)
++    solver.add_callback(lambda: '', lambda: (allrd.stop(), show_time()))
++
++
++def solve(proto, snapshot, gpus, timing, uid, rank):
++    caffe.set_mode_gpu()
++    caffe.set_device(gpus[rank])
++    caffe.set_solver_count(len(gpus))
++    caffe.set_solver_rank(rank)
++    caffe.set_multiprocess(True)
++
++    solver = caffe.SGDSolver(proto)
++    if snapshot and len(snapshot) != 0:
++        solver.restore(snapshot)
++
++    nccl = caffe.NCCL(solver, uid)
++    nccl.bcast()
++
++    if timing and rank == 0:
++        time(solver, nccl)
++    else:
++        solver.add_callback(nccl)
++
++    if solver.param.layer_wise_reduce:
++        solver.net.after_backward(nccl)
++    solver.step(solver.param.max_iter)
++
++
++if __name__ == '__main__':
++    import argparse
++    parser = argparse.ArgumentParser()
++
++    parser.add_argument("--solver", required=True, help="Solver proto definition.")
++    parser.add_argument("--snapshot", help="Solver snapshot to restore.")
++    parser.add_argument("--gpus", type=int, nargs='+', default=[0],
++                        help="List of device ids.")
++    parser.add_argument("--timing", action='store_true', help="Show timing info.")
++    args = parser.parse_args()
++
++    train(args.solver, args.snapshot, args.gpus, args.timing)
+diff --git a/scripts/Construct_XML_Annotations_from_COCO_JSON.py b/scripts/Construct_XML_Annotations_from_COCO_JSON.py
+deleted file mode 100644
+index 3f0670f..0000000
+--- a/scripts/Construct_XML_Annotations_from_COCO_JSON.py
++++ /dev/null
+@@ -1,472 +0,0 @@
+-"""
+-I'm expecting you have openCV, numpy, and pandas
+-since you're about to run some ML algorithms that requires most of them.
+-
+-If you've run this script before, then I will be producing a script to look
+-through all the subdirectories and restore the files to their original location.
+-"""
+-import json
+-from os import path, environ, mkdir
+-import argparse
+-from shutil import move, copyfile
+-from cv2 import imread
+-from lxml import etree, objectify
+-import pandas as pd
+-import numpy as np
+-
+-parser = argparse.ArgumentParser(
+-    description='Construct_XML_Annotations_from_JSON')
+-parser.add_argument('-y', '--year',
+-                    help="The year to append to train and val directories",
+-                    type=int,
+-                    required=True)
+-parser.add_argument('-t', '--type',
+-                    help="The type of imageset, 'train' or 'val'",
+-                    choices=["train", "val"],
+-                    type=str, required=True)
+-parser.add_argument('-c', '--container', help="'instances'",
+-                    choices=["instances"], type=str, default="instances")
+-parser.add_argument('-s', '--split',
+-                    help="If you want to further split the training set", type=float)
+-parser.add_argument('-l', '--label',
+-                    help="Generate a new labels.txt including this label. Repeatable",
+-                    action='append', type=str)
+-parser.add_argument(
+-    '-p', '--copy', help="Copy files don't move them.", action="store_true")
+-args = parser.parse_args()
+-
+-# import numpy as np
+-YEAR = args.year
+-TYPEPREFIX = args.type  # "train" or "val"
+-# For example this default expects: $HOME/data/coco/Images/train2017
+-# and $HOME/data/coco/Annotations
+-CONTAINER = args.container
+-# Further splits data if you are not going on to do the Test stage of COCO
+-# Creates train.txt and minival.txt with image locations and annotation
+-# locations if type is "train"
+-if args.split:
+-    TRAIN_SPLIT = args.split
+-# Helpful if you consider running this program several times
+-# DANGER: Until the companion program is created, you can just delete the train_minusminival20xy/ directory
+-# ***___ONLY___*** if you've used the copy the last time. If you used move, then copy those files back in
+-# to your PATH_TO_IMAGES
+-COPY_FILES = args.copy
+-
+-# Will create annotations/val or annotations/train
+-OUTPUT_XML_BASE_DIR = "%s/data/coco/Annotations/" % (environ['HOME'])
+-# sometimes we just have everything in one directory as silly as that sounds
+-INPUT_JSON_BASE_DIR = "%s/data/coco/Annotations/" % (environ['HOME'])
+-ROOT_COCO = "%s/data/coco/" % (environ['HOME'])
+-PATH_TO_IMAGES = "%s/data/coco/Images/%s%d/" % (
+-    environ['HOME'], TYPEPREFIX, YEAR)
+-PATH_TO_IMAGES = "%s/data/coco/Images/%s%d/" % (
+-    environ['HOME'], TYPEPREFIX, YEAR)
+-ROUND_COORDS = True
+-
+-with open(INPUT_JSON_BASE_DIR + CONTAINER + '_' + TYPEPREFIX + str(YEAR) + '.json', 'r') as jsfile:
+-    jsonfile = json.load(jsfile)
+-    # To write labels.txt with appropriate labels, uncomment this section
+-    if args.label:
+-        i = 0
+-        with open('labels.txt', mode='w') as labels:
+-            for row in jsonfile['categories']:
+-                # Remember to change supercategories or names depending on what you want. If you want everything
+-                # Just take out the if line
+-                if row['name'] in args.label:
+-                    i += 1
+-                    labels.write(str(row['id']) + "," +
+-                                 str(i) + ',' + row['name'] + '\n')
+-    label_ids = []
+-    with open('labels.txt') as labels:
+-        labels_file = labels.readlines()
+-        for label in labels_file:
+-            # Labelid is the original COCO label for the object
+-            labelid = label.rstrip().split(',')[0]
+-            # In case we get a spare empty string at the end
+-            if not labelid == "":
+-                label_ids.append(int(labelid))
+-print(label_ids, "xxx")
+-new_set = []
+-for annotation in jsonfile['annotations']:
+-    if annotation['category_id'] in label_ids:
+-        new_set.append(annotation)
+-if len(new_set) == 0:
+-    print("Perhaps you entered a label incorrectly, since there are no results which match.")
+-    exit(0)
+-print(len(new_set), "xxx")
+-df = pd.DataFrame(data=new_set)
+-df = df.sort_values(['image_id', 'category_id'])
+-grouped = df.groupby(['image_id'])
+-
+-if not path.isdir(OUTPUT_XML_BASE_DIR + TYPEPREFIX):
+-    mkdir(OUTPUT_XML_BASE_DIR + TYPEPREFIX)
+-IMAGE_NAMES = []
+-ANN_DIR = '%sAnnotations/%s%d/' % (ROOT_COCO, TYPEPREFIX, YEAR)
+-if not path.isdir(ANN_DIR):
+-    mkdir(ANN_DIR)
+-for image in grouped:
+-    imagename = "%012d" % (image[0])
+-    IMAGE_NAMES.append(imagename)
+-    if path.isfile(ANN_DIR + imagename + ".xml"):
+-        continue  # Don't overwrite, unless we force it to
+-    image_file = imread(PATH_TO_IMAGES + imagename + '.jpg')
+-    E = objectify.ElementMaker(annotate=False)
+-    img_annotation = E.annotation(
+-        E.folder(TYPEPREFIX),
+-        E.filename(imagename),
+-        E.source(
+-            E.database('MS COCO 2017'),
+-        ),
+-        E.size(
+-            E.width(image_file.shape[1]),
+-            E.height(image_file.shape[0]),
+-            E.depth(3),
+-        ),
+-        E.segmented(0)
+-    )
+-    for row in image[1].iterrows():
+-        if row[1]['category_id'] in label_ids:
+-            objectNode = E.object(
+-                E.name(str(row[1]['category_id'])),
+-                E.pose("Unspecified"),
+-                E.truncated("0"),
+-                E.difficult("0"),
+-                E.bndbox(
+-                    E.xmin(
+-                        str(int(round(row[1]['bbox'][0]))) if ROUND_COORDS else str(int(row[1]['bbox'][0]))),
+-                    E.ymin(
+-                        str(int(round(row[1]['bbox'][1]))) if ROUND_COORDS else str(int(row[1]['bbox'][1]))),
+-                    E.xmax(str(int(round(row[1]['bbox'][0] + row[1]['bbox'][2])))
+-                           if ROUND_COORDS else str(int(row[1]['bbox'][0] + row[1]['bbox'][2]))),
+-                    E.ymax(str(int(round(row[1]['bbox'][1] + row[1]['bbox'][3])))
+-                           if ROUND_COORDS else str(int(row[1]['bbox'][1] + row[1]['bbox'][3]))),
+-                ),
+-            )
+-        img_annotation.append(objectNode)
+-    xml_pretty = etree.tostring(img_annotation, pretty_print=True)
+-    with open(ANN_DIR + imagename + ".xml", 'wb') as ann_file:
+-        ann_file.write(xml_pretty)
+-
+-print("finished with xmls, now moving or copying")
+-if TYPEPREFIX == 'train':
+-    if TRAIN_SPLIT and TRAIN_SPLIT < 1.0:
+-        TRAIN_DIR = 'Images/train_minusminival%d/' % (YEAR)
+-        TRAIN_FULL_DIR = '%s%s' % (ROOT_COCO, TRAIN_DIR)
+-        TRAIN_ANN_DIR = 'Annotations/train_minusminival%d/' % (YEAR)
+-        TRAIN_FULL_ANN_DIR = '%s%s' % (ROOT_COCO, TRAIN_ANN_DIR)
+-        MINIVAL_DIR = 'Images/minival%d/' % (YEAR)
+-        MINIVAL_FULL_DIR = '%s%s' % (ROOT_COCO, MINIVAL_DIR)
+-        MINIVAL_ANN_DIR = 'Annotations/minival%d/' % (YEAR)
+-        MINIVAL_FULL_ANN_DIR = '%s%s' % (ROOT_COCO, MINIVAL_ANN_DIR)
+-        if not path.isdir(TRAIN_DIR):
+-            mkdir(TRAIN_FULL_DIR)
+-            mkdir(TRAIN_FULL_ANN_DIR)
+-        if not path.isdir(MINIVAL_DIR):
+-            mkdir(MINIVAL_FULL_DIR)
+-            mkdir(MINIVAL_FULL_ANN_DIR)
+-        SELECTED_FOR_MINIVAL = []
+-        while len(SELECTED_FOR_MINIVAL) < (1.0 - TRAIN_SPLIT) * len(IMAGE_NAMES):
+-            RANDOM_IDX = np.random.randint(0, high=len(IMAGE_NAMES), size=1)
+-            while RANDOM_IDX in SELECTED_FOR_MINIVAL:
+-                RANDOM_IDX = np.random.randint(
+-                    0, high=len(IMAGE_NAMES), size=1)
+-            SELECTED_FOR_MINIVAL.append(int(RANDOM_IDX))
+-        SELECTED_FOR_TRAIN = sorted(
+-            list(set(list(range(len(IMAGE_NAMES)))).difference(SELECTED_FOR_MINIVAL)))
+-        with open('train2.txt', 'w') as train_file:
+-            for idx in SELECTED_FOR_TRAIN:
+-                if COPY_FILES:
+-                    copyfile(
+-                        PATH_TO_IMAGES + IMAGE_NAMES[idx] + ".jpg",
+-                        TRAIN_FULL_DIR + IMAGE_NAMES[idx] + ".jpg")
+-                    copyfile(
+-                        ANN_DIR + IMAGE_NAMES[idx] + ".xml",
+-                        TRAIN_FULL_ANN_DIR + IMAGE_NAMES[idx] + ".xml")
+-                else:
+-                    move(
+-                        PATH_TO_IMAGES + IMAGE_NAMES[idx] + ".jpg",
+-                        TRAIN_FULL_DIR + IMAGE_NAMES[idx] + ".jpg")
+-                    move(
+-                        ANN_DIR + IMAGE_NAMES[idx] + ".xml",
+-                        TRAIN_FULL_ANN_DIR + IMAGE_NAMES[idx] + ".xml")
+-                train_file.write(
+-                    "/" + TRAIN_DIR + IMAGE_NAMES[idx] + ".jpg /" + TRAIN_ANN_DIR + IMAGE_NAMES[idx] + ".xml\n")
+-        with open('minival2.txt', 'w')as minival_file:
+-            for idx in SELECTED_FOR_MINIVAL:
+-                if COPY_FILES:
+-                    copyfile(
+-                        PATH_TO_IMAGES + IMAGE_NAMES[idx] + ".jpg",
+-                        MINIVAL_FULL_DIR + IMAGE_NAMES[idx] + ".jpg"
+-                    )
+-                    copyfile(
+-                        ANN_DIR + IMAGE_NAMES[idx] + ".xml",
+-                        MINIVAL_FULL_ANN_DIR + IMAGE_NAMES[idx] + ".xml"
+-                    )
+-                else:
+-                    move(
+-                        PATH_TO_IMAGES + IMAGE_NAMES[idx] + ".jpg",
+-                        MINIVAL_FULL_DIR + IMAGE_NAMES[idx] + ".jpg"
+-                    )
+-                    move(
+-                        ANN_DIR + IMAGE_NAMES[idx] + ".xml",
+-                        MINIVAL_FULL_ANN_DIR + IMAGE_NAMES[idx] + ".xml"
+-                    )
+-                minival_file.write(
+-                    "/" + MINIVAL_DIR + IMAGE_NAMES[idx] + ".jpg /" + MINIVAL_ANN_DIR + IMAGE_NAMES[idx] + ".xml\n")
+-    else:
+-        with open('train2.txt', 'w') as train_file:
+-            IMG_RELATIVE = '/Images/train%d/' % (YEAR)
+-            TRAIN_ANN_DIR = 'Annotations/train%d/' % (YEAR)
+-            TRAIN_FULL_ANN_DIR = "%s%s" % (ROOT_COCO, TRAIN_ANN_DIR)
+-            if not path.isdir(TRAIN_FULL_ANN_DIR):
+-                mkdir(TRAIN_FULL_ANN_DIR)
+-            for i in range(len(IMAGE_NAMES)):
+-                train_file.write(
+-                    IMG_RELATIVE + IMAGE_NAMES[i] + ".jpg /" + TRAIN_ANN_DIR + IMAGE_NAMES[i] + ".xml\n")
+-else:
+-    with open('val2.txt', 'w') as val_file:
+-        IMG_RELATIVE = '/Images/val%d/' % (YEAR)
+-        VAL_ANN_DIR = 'Annotations/val%d/' % (YEAR)
+-        VALL_FULL_ANN_DIR = '%s%s' % (ROOT_COCO, VAL_ANN_DIR)
+-        if not path.isdir(VAL_ANN_DIR):
+-            mkdir(VAL_ANN_DIR)
+-        for i in range(len(IMAGE_NAMES)):
+-            val_file.write(
+-                IMG_RELATIVE + IMAGE_NAMES[i] + ".jpg /" + VAL_ANN_DIR + IMAGE_NAMES[i] + ".xml\n")
+-
+-"""
+-Example of Pascal VOC 2009 annotation XML
+-<annotation>
+-	<filename>2009_005311.jpg</filename>
+-	<folder>VOC2012</folder>
+-	<object>
+-		<name>diningtable</name>
+-		<bndbox>
+-			<xmax>364</xmax>
+-			<xmin>161</xmin>
+-			<ymax>301</ymax>
+-			<ymin>200</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>chair</name>
+-		<bndbox>
+-			<xmax>298</xmax>
+-			<xmin>176</xmin>
+-			<ymax>375</ymax>
+-			<ymin>300</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Rear</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>432</xmax>
+-			<xmin>273</xmin>
+-			<ymax>339</ymax>
+-			<ymin>205</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>chair</name>
+-		<bndbox>
+-			<xmax>413</xmax>
+-			<xmin>297</xmin>
+-			<ymax>375</ymax>
+-			<ymin>268</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>465</xmax>
+-			<xmin>412</xmin>
+-			<ymax>273</ymax>
+-			<ymin>177</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Left</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>chair</name>
+-		<bndbox>
+-			<xmax>463</xmax>
+-			<xmin>427</xmin>
+-			<ymax>329</ymax>
+-			<ymin>225</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Left</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>chair</name>
+-		<bndbox>
+-			<xmax>186</xmax>
+-			<xmin>85</xmin>
+-			<ymax>374</ymax>
+-			<ymin>250</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Right</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>232</xmax>
+-			<xmin>74</xmin>
+-			<ymax>307</ymax>
+-			<ymin>175</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Right</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>273</xmax>
+-			<xmin>233</xmin>
+-			<ymax>200</ymax>
+-			<ymin>148</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Frontal</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>369</xmax>
+-			<xmin>313</xmin>
+-			<ymax>235</ymax>
+-			<ymin>165</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>151</xmax>
+-			<xmin>94</xmin>
+-			<ymax>244</ymax>
+-			<ymin>166</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Right</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>204</xmax>
+-			<xmin>156</xmin>
+-			<ymax>210</ymax>
+-			<ymin>157</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Frontal</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>350</xmax>
+-			<xmin>299</xmin>
+-			<ymax>216</ymax>
+-			<ymin>157</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>bottle</name>
+-		<bndbox>
+-			<xmax>225</xmax>
+-			<xmin>215</xmin>
+-			<ymax>230</ymax>
+-			<ymin>196</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>bottle</name>
+-		<bndbox>
+-			<xmax>180</xmax>
+-			<xmin>170</xmin>
+-			<ymax>210</ymax>
+-			<ymin>184</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>0</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>0</truncated>
+-	</object>
+-	<object>
+-		<name>person</name>
+-		<bndbox>
+-			<xmax>179</xmax>
+-			<xmin>110</xmin>
+-			<ymax>244</ymax>
+-			<ymin>160</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Right</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<object>
+-		<name>chair</name>
+-		<bndbox>
+-			<xmax>87</xmax>
+-			<xmin>66</xmin>
+-			<ymax>270</ymax>
+-			<ymin>192</ymin>
+-		</bndbox>
+-		<difficult>0</difficult>
+-		<occluded>1</occluded>
+-		<pose>Unspecified</pose>
+-		<truncated>1</truncated>
+-	</object>
+-	<segmented>0</segmented>
+-	<size>
+-		<depth>3</depth>
+-		<height>375</height>
+-		<width>500</width>
+-	</size>
+-	<source>
+-		<annotation>PASCAL VOC2009</annotation>
+-		<database>The VOC2009 Database</database>
+-"""
+diff --git a/scripts/caffe b/scripts/caffe
+new file mode 100644
+index 0000000..8a0b22a
+--- /dev/null
++++ b/scripts/caffe
+@@ -0,0 +1,73 @@
++# bash completion for Caffe's command line utility       -*- shell-script -*-
++# COPYRIGHT (C) 2015,2016 Zhou Mo <cdluminate@gmail.com>
++# License: BSD-2-Clause
++# Originally appeard at https://github.com/BVLC/caffe/issues/3149
++
++# Updated for caffe (1.0.0~rc3+20160715-g42cd785)
++_caffe()
++{
++  local cur prev words cword
++  _init_completion -s || return
++
++  local prototxts='@(prototxt)'
++  local caffemodels='@(caffemodel,binaryproto)'
++  local solverstates='@(solverstate)'
++  local caffefiles='@(prototxt|caffemodel|solverstate)'
++
++  local flags='-gpu -iterations -model -snapshot -solver -weights -sighup_effect -sigint_effect -level -stage -phase'
++  
++  if [[ $cword -eq 1 ]]; then
++    COMPREPLY=( $( compgen -W 'train test time device_query' -- "$cur" ) )
++    return 0
++  fi
++  
++  if [[ $cword -eq 2 ]]; then
++    case ${words[1]} in
++    train|test|device_query|time)
++      COMPREPLY=( $( compgen -W "$flags" -- "$cur") )
++      return 0
++      ;;
++    *)
++      return 0
++      ;;
++    esac
++  fi
++
++  case $prev in
++  -gpu|-iterations|-version|-level|-stage)
++    return 0
++    ;;
++  -solver|-model)
++    _filedir $prototxts
++    return 0
++    ;;
++  -weights)
++    _filedir $caffemodels
++    return 0
++    ;;
++  -snapshot)
++    _filedir $solverstates
++    return 0
++    ;;
++  -sighup_effect|-sigint_effect)
++    COMPREPLY=( $( compgen -W 'snapshot stop none' -- "$cur") )
++    return 0
++    ;;
++  -phase)
++    COMPREPLY=( $( compgen -W 'TRAIN TEST' -- "$cur") )
++    return 0
++    ;;
++  *)
++    COMPREPLY=( $( compgen -W "$flags" -- "$cur") )
++    return 0
++    ;;
++  esac
++
++  # file completion on relevant files
++  _filedir "$caffefiles"
++
++  return 0
++}
++complete -F _caffe caffe
++
++# vim
+diff --git a/scripts/create_annoset.py b/scripts/create_annoset.py
+index 8eb863a..eed11ab 100644
+--- a/scripts/create_annoset.py
++++ b/scripts/create_annoset.py
+@@ -72,46 +72,46 @@ if __name__ == "__main__":
+ 
+   # check if root directory exists
+   if not os.path.exists(root_dir):
+-    print("root directory: {} does not exist".format(root_dir))
++    print "root directory: {} does not exist".format(root_dir)
+     sys.exit()
+   # add "/" to root directory if needed
+   if root_dir[-1] != "/":
+     root_dir += "/"
+   # check if list file exists
+   if not os.path.exists(list_file):
+-    print("list file: {} does not exist".format(list_file))
++    print "list file: {} does not exist".format(list_file)
+     sys.exit()
+   # check list file format is correct
+   with open(list_file, "r") as lf:
+     for line in lf.readlines():
+       img_file, anno = line.strip("\n").split(" ")
+       if not os.path.exists(root_dir + img_file):
+-        print("image file: {} does not exist".format(root_dir + img_file))
++        print "image file: {} does not exist".format(root_dir + img_file)
+       if anno_type == "classification":
+         if not anno.isdigit():
+-          print("annotation: {} is not an integer".format(anno))
++          print "annotation: {} is not an integer".format(anno)
+       elif anno_type == "detection":
+         if not os.path.exists(root_dir + anno):
+-          print("annofation file: {} does not exist".format(root_dir + anno))
++          print "annofation file: {} does not exist".format(root_dir + anno)
+           sys.exit()
+       break
+   # check if label map file exist
+   if anno_type == "detection":
+     if not os.path.exists(label_map_file):
+-      print("label map file: {} does not exist".format(label_map_file))
++      print "label map file: {} does not exist".format(label_map_file)
+       sys.exit()
+     label_map = caffe_pb2.LabelMap()
+     lmf = open(label_map_file, "r")
+     try:
+       text_format.Merge(str(lmf.read()), label_map)
+     except:
+-      print("Cannot parse label map file: {}".format(label_map_file))
++      print "Cannot parse label map file: {}".format(label_map_file)
+       sys.exit()
+   out_parent_dir = os.path.dirname(out_dir)
+   if not os.path.exists(out_parent_dir):
+     os.makedirs(out_parent_dir)
+   if os.path.exists(out_dir) and not redo:
+-    print("{} already exists and I do not hear redo".format(out_dir))
++    print "{} already exists and I do not hear redo".format(out_dir)
+     sys.exit()
+   if os.path.exists(out_dir):
+     shutil.rmtree(out_dir)
+@@ -155,7 +155,7 @@ if __name__ == "__main__":
+         .format(caffe_root, anno_type, min_dim, max_dim, resize_height,
+             resize_width, backend, shuffle, check_size, encode_type, encoded,
+             gray, root_dir, list_file, out_dir)
+-  print(cmd)
++  print cmd
+   process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
+   output = process.communicate()[0]
+ 
+diff --git a/scripts/split_caffe_proto.py b/scripts/split_caffe_proto.py
+new file mode 100755
+index 0000000..7e9dc3e
+--- /dev/null
++++ b/scripts/split_caffe_proto.py
+@@ -0,0 +1,35 @@
++#!/usr/bin/env python
++import mmap
++import re
++import os
++import errno
++
++script_path = os.path.dirname(os.path.realpath(__file__))
++
++# a regex to match the parameter definitions in caffe.proto
++r = re.compile(r'(?://.*\n)*message ([^ ]*) \{\n(?: .*\n|\n)*\}')
++
++# create directory to put caffe.proto fragments
++try:
++    os.mkdir(
++        os.path.join(script_path,
++                     '../docs/_includes/'))
++    os.mkdir(
++        os.path.join(script_path,
++                     '../docs/_includes/proto/'))
++except OSError as exception:
++    if exception.errno != errno.EEXIST:
++        raise
++
++caffe_proto_fn = os.path.join(
++    script_path,
++    '../src/caffe/proto/caffe.proto')
++
++with open(caffe_proto_fn, 'r') as fin:
++
++    for m in r.finditer(fin.read(), re.MULTILINE):
++        fn = os.path.join(
++            script_path,
++            '../docs/_includes/proto/%s.txt' % m.group(1))
++        with open(fn, 'w') as fout:
++            fout.write(m.group(0))
+diff --git a/scripts/travis/install-deps.sh b/scripts/travis/install-deps.sh
+index 2ec1bdd..388080a 100755
+--- a/scripts/travis/install-deps.sh
++++ b/scripts/travis/install-deps.sh
+@@ -105,7 +105,7 @@ if $WITH_CUDA ; then
+   ln -s /usr/local/cuda-$CUDA_VERSION /usr/local/cuda
+ 
+   if $WITH_CUDNN ; then
+-    apt-get install -y --no-install-recommends libcudnn6-dev
++    apt-get install -y --no-install-recommends libcudnn5-dev
+   fi
+ fi
+ 
+diff --git a/src/caffe/layers/annotated_data_layer.cpp b/src/caffe/layers/annotated_data_layer.cpp
+index 9f139b4..a354f1a 100644
+--- a/src/caffe/layers/annotated_data_layer.cpp
++++ b/src/caffe/layers/annotated_data_layer.cpp
+@@ -148,52 +148,32 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
+     timer.Start();
+     // get a anno_datum
+     AnnotatedDatum& anno_datum = *(reader_.full().pop("Waiting for data"));
++    AnnotatedDatum distort_datum(anno_datum);
++    this->data_transformer_->DistortImage(anno_datum.datum(),
++                                          distort_datum.mutable_datum());
++    AnnotatedDatum expand_datum;
++    this->data_transformer_->ExpandImage(distort_datum, &expand_datum);
+     read_time += timer.MicroSeconds();
+     timer.Start();
+-    AnnotatedDatum distort_datum;
+-    AnnotatedDatum* expand_datum = NULL;
+-    if (transform_param.has_distort_param()) {
+-      distort_datum.CopyFrom(anno_datum);
+-      this->data_transformer_->DistortImage(anno_datum.datum(),
+-                                            distort_datum.mutable_datum());
+-      if (transform_param.has_expand_param()) {
+-        expand_datum = new AnnotatedDatum();
+-        this->data_transformer_->ExpandImage(distort_datum, expand_datum);
+-      } else {
+-        expand_datum = &distort_datum;
+-      }
+-    } else {
+-      if (transform_param.has_expand_param()) {
+-        expand_datum = new AnnotatedDatum();
+-        this->data_transformer_->ExpandImage(anno_datum, expand_datum);
+-      } else {
+-        expand_datum = &anno_datum;
+-      }
+-    }
+-    AnnotatedDatum* sampled_datum = NULL;
+-    bool has_sampled = false;
++    AnnotatedDatum sampled_datum;
+     if (batch_samplers_.size() > 0) {
+       // Generate sampled bboxes from expand_datum.
+       vector<NormalizedBBox> sampled_bboxes;
+-      GenerateBatchSamples(*expand_datum, batch_samplers_, &sampled_bboxes);
++      GenerateBatchSamples(expand_datum, batch_samplers_, &sampled_bboxes);
+       if (sampled_bboxes.size() > 0) {
+         // Randomly pick a sampled bbox and crop the expand_datum.
+         int rand_idx = caffe_rng_rand() % sampled_bboxes.size();
+-        sampled_datum = new AnnotatedDatum();
+-        this->data_transformer_->CropImage(*expand_datum,
++        this->data_transformer_->CropImage(expand_datum,
+                                            sampled_bboxes[rand_idx],
+-                                           sampled_datum);
+-        has_sampled = true;
++                                           &sampled_datum);
+       } else {
+-        sampled_datum = expand_datum;
++        sampled_datum.CopyFrom(expand_datum);
+       }
+     } else {
+-      sampled_datum = expand_datum;
++      sampled_datum.CopyFrom(expand_datum);
+     }
+-    CHECK(sampled_datum != NULL);
+-    timer.Start();
+     vector<int> shape =
+-        this->data_transformer_->InferBlobShape(sampled_datum->datum());
++        this->data_transformer_->InferBlobShape(sampled_datum.datum());
+     if (transform_param.has_resize_param()) {
+       if (transform_param.resize_param().resize_mode() ==
+           ResizeParameter_Resize_mode_FIT_SMALL_SIZE) {
+@@ -215,16 +195,16 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
+     if (this->output_labels_) {
+       if (has_anno_type_) {
+         // Make sure all data have same annotation type.
+-        CHECK(sampled_datum->has_type()) << "Some datum misses AnnotationType.";
++        CHECK(sampled_datum.has_type()) << "Some datum misses AnnotationType.";
+         if (anno_data_param.has_anno_type()) {
+-          sampled_datum->set_type(anno_type_);
++          sampled_datum.set_type(anno_type_);
+         } else {
+-          CHECK_EQ(anno_type_, sampled_datum->type()) <<
++          CHECK_EQ(anno_type_, sampled_datum.type()) <<
+               "Different AnnotationType.";
+         }
+         // Transform datum and annotation_group at the same time
+         transformed_anno_vec.clear();
+-        this->data_transformer_->Transform(*sampled_datum,
++        this->data_transformer_->Transform(sampled_datum,
+                                            &(this->transformed_data_),
+                                            &transformed_anno_vec);
+         if (anno_type_ == AnnotatedDatum_AnnotationType_BBOX) {
+@@ -237,23 +217,16 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
+         }
+         all_anno[item_id] = transformed_anno_vec;
+       } else {
+-        this->data_transformer_->Transform(sampled_datum->datum(),
++        this->data_transformer_->Transform(sampled_datum.datum(),
+                                            &(this->transformed_data_));
+         // Otherwise, store the label from datum.
+-        CHECK(sampled_datum->datum().has_label()) << "Cannot find any label.";
+-        top_label[item_id] = sampled_datum->datum().label();
++        CHECK(sampled_datum.datum().has_label()) << "Cannot find any label.";
++        top_label[item_id] = sampled_datum.datum().label();
+       }
+     } else {
+-      this->data_transformer_->Transform(sampled_datum->datum(),
++      this->data_transformer_->Transform(sampled_datum.datum(),
+                                          &(this->transformed_data_));
+     }
+-    // clear memory
+-    if (has_sampled) {
+-      delete sampled_datum;
+-    }
+-    if (transform_param.has_expand_param()) {
+-      delete expand_datum;
+-    }
+     trans_time += timer.MicroSeconds();
+ 
+     reader_.free().push(const_cast<AnnotatedDatum*>(&anno_datum));
+diff --git a/src/caffe/layers/detection_output_layer.cpp b/src/caffe/layers/detection_output_layer.cpp
+index 35078d4..b4ed483 100644
+--- a/src/caffe/layers/detection_output_layer.cpp
++++ b/src/caffe/layers/detection_output_layer.cpp
+@@ -43,10 +43,10 @@ void DetectionOutputLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+   output_directory_ = save_output_param.output_directory();
+   if (!output_directory_.empty()) {
+     if (boost::filesystem::is_directory(output_directory_)) {
+-      // boost::filesystem::remove_all(output_directory_);
++      boost::filesystem::remove_all(output_directory_);
+     }
+     if (!boost::filesystem::create_directories(output_directory_)) {
+-        LOG(WARNING) << "Failed to create directory: " << output_directory_;
++        LOG(FATAL) << "Failed to create directory: " << output_directory_;
+     }
+   }
+   output_name_prefix_ = save_output_param.output_name_prefix();
+diff --git a/src/caffe/proto/caffe.proto b/src/caffe/proto/caffe.proto
+index d7d66dd..352155d 100644
+--- a/src/caffe/proto/caffe.proto
++++ b/src/caffe/proto/caffe.proto
+@@ -257,8 +257,6 @@ message SolverParameter {
+   //    MaxIntegral: maximally interpolated AP. Used in VOC2012/ILSVRC.
+   //    Integral: the natural integral of the precision-recall curve.
+   optional string ap_version = 42 [default = "Integral"];
+-  // If true, display per class result.
+-  optional bool show_per_class_result = 44 [default = false];
+ 
+   // The number of iterations for each test net.
+   repeated int32 test_iter = 3;
+diff --git a/src/caffe/solver.cpp b/src/caffe/solver.cpp
+index 6196d9b..240c118 100644
+--- a/src/caffe/solver.cpp
++++ b/src/caffe/solver.cpp
+@@ -536,9 +536,6 @@ void Solver<Dtype>::TestDetection(const int test_net_id) {
+       ComputeAP(label_true_pos, label_num_pos, label_false_pos,
+                 param_.ap_version(), &prec, &rec, &(APs[label]));
+       mAP += APs[label];
+-      if (param_.show_per_class_result()) {
+-        LOG(INFO) << "class" << label << ": " << APs[label];
+-      }
+     }
+     mAP /= num_pos.size();
+     const int output_blob_index = test_net->output_blob_indices()[i];
+diff --git a/src/caffe/test/test_multibox_loss_layer.cpp b/src/caffe/test/test_multibox_loss_layer.cpp
+index 0510656..304531c 100644
+--- a/src/caffe/test/test_multibox_loss_layer.cpp
++++ b/src/caffe/test/test_multibox_loss_layer.cpp
+@@ -67,7 +67,7 @@ class MultiBoxLossLayerTest : public MultiDeviceTest<TypeParam> {
+         blob_bottom_conf_(new Blob<Dtype>(
+                 num_, num_priors_ * num_classes_, 1, 1)),
+         blob_bottom_prior_(new Blob<Dtype>(num_, 2, num_priors_ * 4, 1)),
+-        blob_bottom_gt_(new Blob<Dtype>(1, 1, 4, 8)),
++        blob_bottom_gt_(new Blob<Dtype>(1, 1, 4, 7)),
+         blob_top_loss_(new Blob<Dtype>()) {
+     blob_bottom_vec_.push_back(blob_bottom_loc_);
+     blob_bottom_vec_.push_back(blob_bottom_conf_);
+diff --git a/src/caffe/util/io.cpp b/src/caffe/util/io.cpp
+index 103427b..7e1c1d9 100644
+--- a/src/caffe/util/io.cpp
++++ b/src/caffe/util/io.cpp
+@@ -163,12 +163,8 @@ bool ReadImageToDatum(const string& filename, const int label,
+   if (cv_img.data) {
+     if (encoding.size()) {
+       if ( (cv_img.channels() == 3) == is_color && !height && !width &&
+-          !min_dim && !max_dim && matchExt(filename, encoding) ) {
+-        datum->set_channels(cv_img.channels());
+-        datum->set_height(cv_img.rows);
+-        datum->set_width(cv_img.cols);
++          !min_dim && !max_dim && matchExt(filename, encoding) )
+         return ReadFileToDatum(filename, label, datum);
+-      }
+       EncodeCVMatToDatum(cv_img, encoding, datum);
+       datum->set_label(label);
+       return true;
+diff --git a/src/caffe/util/sampler.cpp b/src/caffe/util/sampler.cpp
+index 0709d77..e8fd568 100644
+--- a/src/caffe/util/sampler.cpp
++++ b/src/caffe/util/sampler.cpp
+@@ -96,11 +96,11 @@ void SampleBBox(const Sampler& sampler, NormalizedBBox* sampled_bbox) {
+   CHECK_GT(sampler.min_aspect_ratio(), 0.);
+   CHECK_LT(sampler.max_aspect_ratio(), FLT_MAX);
+   float aspect_ratio;
+-  caffe_rng_uniform(1, sampler.min_aspect_ratio(), sampler.max_aspect_ratio(),
+-      &aspect_ratio);
+-
+-  aspect_ratio = std::max<float>(aspect_ratio, std::pow(scale, 2.));
+-  aspect_ratio = std::min<float>(aspect_ratio, 1 / std::pow(scale, 2.));
++  float min_aspect_ratio = std::max<float>(sampler.min_aspect_ratio(),
++                                           std::pow(scale, 2.));
++  float max_aspect_ratio = std::min<float>(sampler.max_aspect_ratio(),
++                                           1 / std::pow(scale, 2.));
++  caffe_rng_uniform(1, min_aspect_ratio, max_aspect_ratio, &aspect_ratio);
+ 
+   // Figure out bbox dimension.
+   float bbox_width = scale * sqrt(aspect_ratio);
+diff --git a/tools/extra/plot_detections.py b/tools/extra/plot_detections.py
+new file mode 100644
+index 0000000..abd6026
+--- /dev/null
++++ b/tools/extra/plot_detections.py
+@@ -0,0 +1,120 @@
++import argparse
++from collections import OrderedDict
++from google.protobuf import text_format
++import matplotlib
++# Force matplotlib to not use any Xwindows backend.
++matplotlib.use('Agg')
++import matplotlib.pyplot as plt
++import numpy as np
++import os
++import skimage.io as io
++import sys
++
++import caffe
++from caffe.proto import caffe_pb2
++
++def get_labelname(labelmap, labels):
++    num_labels = len(labelmap.item)
++    labelnames = []
++    if type(labels) is not list:
++        labels = [labels]
++    for label in labels:
++        found = False
++        for i in xrange(0, num_labels):
++            if label == labelmap.item[i].label:
++                found = True
++                labelnames.append(labelmap.item[i].display_name)
++                break
++        assert found == True
++    return labelnames
++
++def showResults(img_file, results, labelmap=None, threshold=None, display=None):
++    if not os.path.exists(img_file):
++        print "{} does not exist".format(img_file)
++        return
++    img = io.imread(img_file)
++    plt.clf()
++    plt.imshow(img)
++    plt.axis('off');
++    ax = plt.gca()
++    if labelmap:
++        # generate same number of colors as classes in labelmap.
++        num_classes = len(labelmap.item)
++    else:
++        # generate 20 colors.
++        num_classes = 20
++    colors = plt.cm.hsv(np.linspace(0, 1, num_classes)).tolist()
++    for res in results:
++        if 'score' in res and threshold and float(res["score"]) < threshold:
++            continue
++        label = res['label']
++        name = "class " + str(label)
++        if labelmap:
++            name = get_labelname(labelmap, label)[0]
++        if display_classes and name not in display_classes:
++            continue
++        color = colors[label % num_classes]
++        bbox = res['bbox']
++        coords = (bbox[0], bbox[1]), bbox[2] - bbox[0], bbox[3] - bbox[1]
++        ax.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=3))
++        if 'score' in res:
++            score = res['score']
++            display_text = '%s: %.2f' % (name, score)
++        else:
++            display_text = name
++        ax.text(bbox[0], bbox[1], display_text, bbox={'facecolor':color, 'alpha':0.5})
++    if len(results) > 0 and "out_file" in results[0]:
++        plt.savefig(results[0]["out_file"], bbox_inches="tight")
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(
++            description = "Plot the detection results by ssd_detect.")
++    parser.add_argument("resultfile",
++            help = "A file which contains all the detection results.")
++    parser.add_argument("imgdir",
++            help = "A directory which contains the images.")
++    parser.add_argument("--labelmap-file", default="",
++            help = "A file which contains the LabelMap.")
++    parser.add_argument("--visualize-threshold", default=0.01, type=float,
++            help = "Display detections with score higher than the threshold.")
++    parser.add_argument("--save-dir", default="",
++            help = "A directory which saves the image with detection results.")
++    parser.add_argument("--display-classes", default=None,
++            help = "If provided, only display specified class. Separate by ','")
++
++    args = parser.parse_args()
++    result_file = args.resultfile
++    img_dir = args.imgdir
++    if not os.path.exists(img_dir):
++        print "{} does not exist".format(img_dir)
++        sys.exit()
++    labelmap_file = args.labelmap_file
++    labelmap = None
++    if labelmap_file and os.path.exists(labelmap_file):
++        file = open(labelmap_file, 'r')
++        labelmap = caffe_pb2.LabelMap()
++        text_format.Merge(str(file.read()), labelmap)
++    visualize_threshold = args.visualize_threshold
++    save_dir = args.save_dir
++    if save_dir and not os.path.exists(save_dir):
++        os.makedirs(save_dir)
++    display_classes = args.display_classes
++
++    img_results = OrderedDict()
++    with open(result_file, "r") as f:
++        for line in f.readlines():
++            img_name, label, score, xmin, ymin, xmax, ymax = line.strip("\n").split()
++            img_file = "{}/{}".format(img_dir, img_name)
++            result = dict()
++            result["label"] = int(label)
++            result["score"] = float(score)
++            result["bbox"] = [float(xmin), float(ymin), float(xmax), float(ymax)]
++            if save_dir:
++                out_file = "{}/{}.png".format(save_dir, os.path.basename(img_name))
++                result["out_file"] = out_file
++            if img_file not in img_results:
++                img_results[img_file] = [result]
++            else:
++                img_results[img_file].append(result)
++    for img_file, results in img_results.iteritems():
++        showResults(img_file, results, labelmap, visualize_threshold, display_classes)

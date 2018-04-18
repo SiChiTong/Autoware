@@ -1,0 +1,72 @@
+diff --git a/Makefile.config.example b/Makefile.config.example
+index cfca33e..d1a4a13 100644
+--- a/Makefile.config.example
++++ b/Makefile.config.example
+@@ -2,7 +2,7 @@
+ # Contributions simplifying and improving our build system are welcome!
+ 
+ # cuDNN acceleration switch (uncomment to build with cuDNN).
+-# USE_CUDNN := 1
++USE_CUDNN := 0
+ 
+ # CPU-only switch (uncomment to build without GPU support).
+ # CPU_ONLY := 1
+@@ -25,23 +25,17 @@
+ # CUSTOM_CXX := g++
+ 
+ # CUDA directory contains bin/ and lib/ directories that we need.
+-CUDA_DIR := /usr/local/cuda
++CUDA_DIR := /usr/local/cuda-8.0
+ # On Ubuntu 14.04, if cuda tools are installed via
+ # "sudo apt-get install nvidia-cuda-toolkit" then use this instead:
+ # CUDA_DIR := /usr
+ 
+ # CUDA architecture setting: going with all of them.
+-# For CUDA < 6.0, comment the *_50 lines for compatibility.
+-# CUDA_ARCH := -gencode arch=compute_20,code=sm_20 \
+-		-gencode arch=compute_20,code=sm_21 \
+-		-gencode arch=compute_30,code=sm_30 \
+-		-gencode arch=compute_35,code=sm_35 \
+-		-gencode arch=compute_50,code=sm_50 \
+-		-gencode arch=compute_50,code=compute_50
+-CUDA_ARCH := -gencode arch=compute_20,code=sm_20 \
+-		-gencode arch=compute_35,code=sm_35 \
+-		-gencode arch=compute_53,code=sm_53 \
+-		-gencode arch=compute_53,code=compute_53
++# For CUDA < 6.0, comment the lines after *_35 for compatibility.
++CUDA_ARCH := -gencode arch=compute_35,code=sm_35 \
++             -gencode arch=compute_50,code=sm_50 \
++             -gencode arch=compute_52,code=sm_52 \
++             -gencode arch=compute_61,code=sm_61
+ 
+ # BLAS choice:
+ # atlas for ATLAS (default)
+@@ -67,7 +61,7 @@ BLAS := open
+ # NOTE: this is required only if you will compile the python interface.
+ # We need to be able to find Python.h and numpy/arrayobject.h.
+ PYTHON_INCLUDE := /usr/include/python2.7 \
+-		/usr/lib/python2.7/dist-packages/numpy/core/include
++		/usr/local/lib/python2.7/dist-packages/numpy/core/include
+ # Anaconda Python distribution is quite popular. Include path:
+ # Verify anaconda location, sometimes it's in root.
+ # ANACONDA_HOME := $(HOME)/anaconda2
+@@ -92,8 +86,8 @@ PYTHON_LIB := /usr/lib
+ # WITH_PYTHON_LAYER := 1
+ 
+ # Whatever else you find you need goes here.
+-INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/local/include
+-LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib
++INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/local/include /usr/include/hdf5/serial /opt/ros/kinetic/include/opencv-3.2.0-dev
++LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib /opt/ros/kinetic/lib
+ 
+ # If Homebrew is installed at a non standard location (for example your home directory) and you use it for general dependencies
+ # INCLUDE_DIRS += $(shell brew --prefix)/include
+@@ -101,7 +95,7 @@ LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib
+ 
+ # Uncomment to use `pkg-config` to specify OpenCV library paths.
+ # (Usually not necessary -- OpenCV libraries are normally installed in one of the above $LIBRARY_DIRS.)
+-# USE_PKG_CONFIG := 1
++USE_PKG_CONFIG := 1
+ 
+ # N.B. both build and distribute dirs are cleared on `make clean`
+ BUILD_DIR := build
