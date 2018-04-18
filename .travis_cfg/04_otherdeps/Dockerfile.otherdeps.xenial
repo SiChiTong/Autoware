@@ -2,4 +2,6 @@ ARG FROM_FILE="autoware"
 FROM $FROM_FILE
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
+ENV DEBIAN_FRONTEND noninteractive
+
 RUN sudo apt-get install -y -q libopenni2-* openni2-* 1>/dev/null

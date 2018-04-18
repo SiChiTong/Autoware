@@ -1,5 +1,5 @@
 ARG FROM_FILE="autoware"
-FROM $FROM_FILE
+FROM ${FROM_FILE}
 MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
 ARG ROS_DISTRO="kinetic"
@@ -39,36 +39,41 @@ RUN apt-get install -y -q \
         1>/dev/null
 
 # Install ROS
-RUN apt-get install -y -q ros-$ROS_DISTRO-desktop-full ros-$ROS_DISTRO-nmea-msgs ros-$ROS_DISTRO-nmea-navsat-driver ros-$ROS_DISTRO-sound-play ros-$ROS_DISTRO-jsk-visualization ros-$ROS_DISTRO-grid-map ros-$ROS_DISTRO-gps-common \
+RUN apt-get install -y -q ros-${ROS_DISTRO}-desktop-full ros-${ROS_DISTRO}-nmea-msgs ros-${ROS_DISTRO}-nmea-navsat-driver ros-${ROS_DISTRO}-sound-play ros-${ROS_DISTRO}-jsk-visualization ros-${ROS_DISTRO}-grid-map ros-${ROS_DISTRO}-gps-common \
 1>/dev/null
-RUN apt-get install -y -q ros-$ROS_DISTRO-controller-manager ros-$ROS_DISTRO-ros-control ros-$ROS_DISTRO-ros-controllers ros-$ROS_DISTRO-gazebo-ros-control ros-$ROS_DISTRO-joystick-drivers \
+RUN apt-get install -y -q ros-${ROS_DISTRO}-controller-manager ros-${ROS_DISTRO}-ros-control ros-${ROS_DISTRO}-ros-controllers ros-${ROS_DISTRO}-gazebo-ros-control ros-${ROS_DISTRO}-joystick-drivers \
 1>/dev/null
 RUN apt-get install -y -q libnlopt-dev freeglut3-dev qtbase5-dev libqt5opengl5-dev libssh2-1-dev libarmadillo-dev libpcap-dev gksu libgl1-mesa-dev libglew-dev software-properties-common libmosquitto-dev libyaml-cpp-dev python-flask python-requests \
 1>/dev/null
 
+# Caffe dependencies
+RUN apt-get install -y libgflags-dev libgoogle-glog-dev liblmdb-dev libopenblas-dev libcublas7.5
+RUN apt-get install -y libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev protobuf-compiler
+RUN apt-get install -y --no-install-recommends libboost-all-dev
+
 # Add basic user
 ENV USERNAME autoware
 ENV PULSE_SERVER /run/pulse/native
-RUN useradd -m $USERNAME && \
-        echo "$USERNAME:$USERNAME" | chpasswd && \
-        usermod --shell /bin/bash $USERNAME && \
-        usermod -aG sudo $USERNAME && \
-        echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME && \
-        chmod 0440 /etc/sudoers.d/$USERNAME && \
+RUN useradd -m ${USERNAME} && \
+        echo "${USERNAME}:${USERNAME}" | chpasswd && \
+        usermod --shell /bin/bash ${USERNAME} && \
+        usermod -aG sudo ${USERNAME} && \
+        echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${USERNAME} && \
+        chmod 0440 /etc/sudoers.d/${USERNAME} && \
         # Replace 1000 with your user/group id
-        usermod  --uid 1000 $USERNAME && \
-        groupmod --gid 1000 $USERNAME
+        usermod  --uid 1000 ${USERNAME} && \
+        groupmod --gid 1000 ${USERNAME}
 
 RUN rosdep init \
         && rosdep update \
-        && echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
+        && echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
 
 # Setup .bashrc for ROS
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && \
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
         #Fix for qt and X server errors
-        echo "export QT_X11_NO_MITSHM=1" >> /home/$USERNAME/.bashrc && \
+        echo "export QT_X11_NO_MITSHM=1" >> /home/${USERNAME}/.bashrc && \
         # cd to home on login
-        echo "cd" >> /home/$USERNAME/.bashrc
+        echo "cd" >> /home/${USERNAME}/.bashrc
 
 # CUDA
 RUN REPOS_DIR=`echo "ubuntu${OS_VER}" | sed "s/\.//"` && \
@@ -76,11 +81,14 @@ RUN REPOS_DIR=`echo "ubuntu${OS_VER}" | sed "s/\.//"` && \
         CUDA_DEV=`cat index.html | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep -v href` && echo $CUDA_DEV && \
         wget -q https://developer.download.nvidia.com/compute/cuda/repos/${REPOS_DIR}/x86_64/${CUDA_DEV} && \
         dpkg -i ${CUDA_DEV}
-
+RUN function verInt(){ echo "$1" | sed "s/\.//" ; return 0 ; } && \
+        if [ `verInt ${CUDA_VER}` -ge `verInt 9.0` ] ; then \
+        apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub ; \
+        fi
 RUN apt-get update
 RUN CUDA_SFX=`echo "${CUDA_VER}" | sed "s/\./\-/"` && \
-    apt-get install --yes -q cuda-${CUDA_SFX} \
-    1>/dev/null
+        apt-get install --yes -q cuda-${CUDA_SFX} \
+        1>/dev/null
 RUN echo "export PATH=/usr/local/cuda-${CUDA_VER}/bin:\${PATH}" >> /home/${USERNAME}/.bashrc
 RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda-${CUDA_VER}/lib64:\${LD_LIBRARY_PATH}" >> /home/${USERNAME}/.bashrc
 
@@ -95,7 +103,7 @@ RUN cd ~/darknet/data && wget -q https://pjreddie.com/media/files/yolo.weights
 
 # Setting
 ENV LANG="en_US.UTF-8"
-RUN echo "export LANG=\"en_US.UTF-8\"" >> /home/$USERNAME/.bashrc
+RUN echo "export LANG=\"en_US.UTF-8\"" >> /home/${USERNAME}/.bashrc
 
 # Change Terminal Color
 RUN gconftool-2 --set "/apps/gnome-terminal/profiles/Default/use_theme_background" --type bool false
