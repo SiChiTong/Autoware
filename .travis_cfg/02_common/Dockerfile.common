@@ -46,10 +46,9 @@ RUN apt-get install -y -q ros-${ROS_DISTRO}-controller-manager ros-${ROS_DISTRO}
 RUN apt-get install -y -q libnlopt-dev freeglut3-dev qtbase5-dev libqt5opengl5-dev libssh2-1-dev libarmadillo-dev libpcap-dev gksu libgl1-mesa-dev libglew-dev software-properties-common libmosquitto-dev libyaml-cpp-dev python-flask python-requests \
 1>/dev/null
 
-# Caffe dependencies
-RUN apt-get install -y libgflags-dev libgoogle-glog-dev liblmdb-dev libopenblas-dev libcublas7.5
-RUN apt-get install -y libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev protobuf-compiler
-RUN apt-get install -y --no-install-recommends libboost-all-dev
+# Caffe dependencies common
+RUN apt-get install -y -q libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev protobuf-compiler libgoogle-glog-dev liblmdb-dev libopenblas-dev 1>/dev/null
+RUN apt-get install -y --no-install-recommends libboost-all-dev 1>/dev/null
 
 # Add basic user
 ENV USERNAME autoware
@@ -100,15 +99,6 @@ USER autoware
 RUN cd && git clone https://github.com/pjreddie/darknet.git
 RUN cd ~/darknet && git checkout 56d69e73aba37283ea7b9726b81afd2f79cd1134
 RUN cd ~/darknet/data && wget -q https://pjreddie.com/media/files/yolo.weights
-
-# SSD
-#RUN cd && git clone https://github.com/weiliu89/caffe.git
-#RUN mv ~/caffe ~/ssdcaffe && cd ~/ssdcaffe && git checkout ssd
-#RUN cp Makefile.config.example Makefile.config
-#RUN make clean
-#RUN make -j 8
-#RUN make distribute
-
 
 # Setting
 ENV LANG="en_US.UTF-8"

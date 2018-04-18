@@ -10,6 +10,19 @@ ENV export ROS_PARALLEL_JOBS="-j2 -l2"
 
 # Install Autoware
 RUN cd && git clone --depth=1 --branch=$GIT_BRANCH https://github.com/CPFL/Autoware.git /home/$USERNAME/Autoware
+
+# Install Caffe
+RUN cd && git clone https://github.com/weiliu89/caffe.git
+RUN mv ~/caffe ~/ssdcaffe && cd ~/ssdcaffe && git checkout ssd
+RUN patch < /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch/ssdcaffe.patch
+RUN patch < /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch/docs.patch
+RUN cp Makefile.config.example Makefile.config
+RUN patch < /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch/Makefile_config.patch
+RUN make clean
+RUN make -j 2
+RUN make distribute
+
+# Make Autoware
 RUN cd /home/$USERNAME/Autoware
 RUN /bin/bash -c 'source /opt/ros/$ROS_DISTRO/setup.bash; cd /home/$USERNAME/Autoware/ros/src; catkin_init_workspace; cd ../; ./catkin_make_release'
 RUN echo "source /home/$USERNAME/Autoware/ros/devel/setup.bash" >> /home/$USERNAME/.bashrc

@@ -13,3 +13,5 @@ RUN apt-get -q update 1>/dev/null
 RUN add-apt-repository ppa:mosquitto-dev/mosquitto-ppa 1>/dev/null
 RUN apt-get -q update 1>/dev/null
 
+# Caffe dependencies trusty
+RUN apt-get install -y -q libatlas-base-dev python-skimage python-protobuf 1>/dev/null
