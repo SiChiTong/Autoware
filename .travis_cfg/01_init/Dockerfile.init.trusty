@@ -5,11 +5,11 @@ MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 ENV DEBIAN_FRONTEND noninteractive
 
 # Update
-RUN apt-get -q update
-RUN apt-get install -y -q wget software-properties-common
+RUN apt-get -q update 1>/dev/null
+RUN apt-get install -y -q wget software-properties-common 1>/dev/null
 RUN wget http://packages.ros.org/ros.key -O - | apt-key add - 1>/dev/null
 RUN echo "deb http://packages.ros.org/ros/ubuntu trusty main" > /etc/apt/sources.list.d/ros-latest.list
-RUN apt-get -q update
+RUN apt-get -q update 1>/dev/null
 RUN add-apt-repository ppa:mosquitto-dev/mosquitto-ppa 1>/dev/null
-RUN apt-get -q update
+RUN apt-get -q update 1>/dev/null
 

@@ -15,10 +15,11 @@ RUN apt-get install -y -q \
         libflann-dev \
         libgsl0-dev \
         libgoogle-perftools-dev \
-        libeigen3-dev
+        libeigen3-dev \
+        1>/dev/null
 
 # Install dev tools
-RUN apt-get -y -q install vim tmux
+RUN apt-get -y -q install vim tmux 1>/dev/null
 
 # Install some basic GUI and sound libs
 RUN apt-get install -y -q \
@@ -26,19 +27,24 @@ RUN apt-get install -y -q \
         fonts-dejavu fonts-liberation hicolor-icon-theme \
         libcanberra-gtk3-0 libcanberra-gtk-module libcanberra-gtk3-module \
         libasound2 libgtk2.0-0 libdbus-glib-1-2 libxt6 libexif12 \
-        libgl1-mesa-glx libgl1-mesa-dri
+        libgl1-mesa-glx libgl1-mesa-dri \
+        1>/dev/null
 
 RUN update-locale LANG=C.UTF-8 LC_MESSAGES=POSIX 1>/dev/null
 
 # Install some basic GUI tools
 RUN apt-get install -y -q \
         cmake-qt-gui \
-        gnome-terminal
+        gnome-terminal \
+        1>/dev/null
 
 # Install ROS
-RUN apt-get install -y -q ros-$ROS_DISTRO-desktop-full ros-$ROS_DISTRO-nmea-msgs ros-$ROS_DISTRO-nmea-navsat-driver ros-$ROS_DISTRO-sound-play ros-$ROS_DISTRO-jsk-visualization ros-$ROS_DISTRO-grid-map ros-$ROS_DISTRO-gps-common
-RUN apt-get install -y -q ros-$ROS_DISTRO-controller-manager ros-$ROS_DISTRO-ros-control ros-$ROS_DISTRO-ros-controllers ros-$ROS_DISTRO-gazebo-ros-control ros-$ROS_DISTRO-joystick-drivers
-RUN apt-get install -y -q libnlopt-dev freeglut3-dev qtbase5-dev libqt5opengl5-dev libssh2-1-dev libarmadillo-dev libpcap-dev gksu libgl1-mesa-dev libglew-dev software-properties-common libmosquitto-dev libyaml-cpp-dev python-flask python-requests
+RUN apt-get install -y -q ros-$ROS_DISTRO-desktop-full ros-$ROS_DISTRO-nmea-msgs ros-$ROS_DISTRO-nmea-navsat-driver ros-$ROS_DISTRO-sound-play ros-$ROS_DISTRO-jsk-visualization ros-$ROS_DISTRO-grid-map ros-$ROS_DISTRO-gps-common \
+1>/dev/null
+RUN apt-get install -y -q ros-$ROS_DISTRO-controller-manager ros-$ROS_DISTRO-ros-control ros-$ROS_DISTRO-ros-controllers ros-$ROS_DISTRO-gazebo-ros-control ros-$ROS_DISTRO-joystick-drivers \
+1>/dev/null
+RUN apt-get install -y -q libnlopt-dev freeglut3-dev qtbase5-dev libqt5opengl5-dev libssh2-1-dev libarmadillo-dev libpcap-dev gksu libgl1-mesa-dev libglew-dev software-properties-common libmosquitto-dev libyaml-cpp-dev python-flask python-requests \
+1>/dev/null
 
 # Add basic user
 ENV USERNAME autoware
@@ -66,14 +72,15 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc && 
 
 # CUDA
 RUN REPOS_DIR=`echo "ubuntu${OS_VER}" | sed "s/\.//"` && \
-    wget -q https://developer.download.nvidia.com/compute/cuda/repos/${REPOS_DIR}/x86_64 -O index.html && \
-    CUDA_DEV=`cat index.html | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep -v href` && echo $CUDA_DEV && \
-    wget -q https://developer.download.nvidia.com/compute/cuda/repos/${REPOS_DIR}/x86_64/${CUDA_DEV} && \
-    dpkg -i ${CUDA_DEV}
+        wget -q https://developer.download.nvidia.com/compute/cuda/repos/${REPOS_DIR}/x86_64 -O index.html && \
+        CUDA_DEV=`cat index.html | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep amd64.deb | tail -n 1 | sed -e "s/</\n/g" -e "s/>/\n/g" | grep cuda-repo-${REPOS_DIR}_${CUDA_VER} | grep -v href` && echo $CUDA_DEV && \
+        wget -q https://developer.download.nvidia.com/compute/cuda/repos/${REPOS_DIR}/x86_64/${CUDA_DEV} && \
+        dpkg -i ${CUDA_DEV}
 
 RUN apt-get update
 RUN CUDA_SFX=`echo "${CUDA_VER}" | sed "s/\./\-/"` && \
-    apt-get install --yes --force-yes -q cuda-${CUDA_SFX}
+    apt-get install --yes -q cuda-${CUDA_SFX} \
+    1>/dev/null
 RUN echo "export PATH=/usr/local/cuda-${CUDA_VER}/bin:\${PATH}" >> /home/${USERNAME}/.bashrc
 RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda-${CUDA_VER}/lib64:\${LD_LIBRARY_PATH}" >> /home/${USERNAME}/.bashrc
 
