@@ -4,9 +4,11 @@ MAINTAINER Yuma Nihei <yuma.nihei@tier4.jp>
 
 ARG GIT_BRANCH="master"
 ARG ROS_DISTRO="kinetic"
+ARG CUDA_VER="8.0"
+ARG CORE_NUMBER="8"
 
 ENV DEBIAN_FRONTEND noninteractive
-ENV export ROS_PARALLEL_JOBS="-j2 -l2"
+ENV export ROS_PARALLEL_JOBS="-j${CORE_NUMBER} -l${CORE_NUMBER}"
 
 # Install Autoware
 RUN cd && git clone --depth=1 --branch=$GIT_BRANCH https://github.com/CPFL/Autoware.git /home/$USERNAME/Autoware
@@ -14,15 +16,18 @@ RUN cd && git clone --depth=1 --branch=$GIT_BRANCH https://github.com/CPFL/Autow
 # Install Caffe
 RUN cd && git clone https://github.com/weiliu89/caffe.git
 RUN mv ~/caffe ~/ssdcaffe && cd ~/ssdcaffe && git checkout ssd
-RUN cp -r /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch ./ssdcaffe.patch
+RUN sudo chmod a+rw /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch
+RUN cp -r /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch ./ssdcaffe_patch
 RUN patch -p 1 < ssdcaffe_patch/ssdcaffe.patch
 RUN patch -p 1 < ssdcaffe_patch/docs.patch
 RUN cp Makefile.config.example Makefile.config.example.back
+RUN OPENCV_DEV=`pkg-config --list-all|grep opencv|tail -n 1|sed -e "s/\ /\n/g"|grep dev` && \
+sed -i -e "s#\$\(CUDA\_VER\)#${CUDA_VER}#g" -e "s#\$\(ROS\_DISTRO\)#${ROS_DISTRO}#g" -e "s#\$\(OPENCV\_DEV\)#${OPENCV_DEV}#g" ssdcaffe_patch/Makefile_config.patch
 RUN patch -p 1 < ssdcaffe_patch/Makefile_config.patch
 RUN mv Makefile.config.example Makefile.config
 RUN mv Makefile.config.example.back Makefile.config.example
 RUN make clean
-RUN make -j 2
+RUN make -j ${CORE_NUMBER}
 RUN make distribute
 
 # Make Autoware

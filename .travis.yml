@@ -12,27 +12,29 @@ language:
 cache: false
 env:
   global:
-  - MAKEFLAGS="-j 2"
+  - CORE_NUMBER="2"
+  - MAKEFLAGS="-j $CORE_NUMBER"
   - GIT_BRANCH=`git branch | grep -v \*` ; GIT_BRANCH=`echo $GIT_BRANCH`
   matrix:
   - ROS_DISTRO=indigo  OS_CODE=trusty OS_VER=14.04 CUDA_VER=8.0
   - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=8.0
   - ROS_DISTRO=kinetic OS_CODE=xenial OS_VER=16.04 CUDA_VER=9.0
 before_install:
-- travis_wait 30 docker pull ubuntu:$OS_CODE 1>/dev/null
+- docker pull ubuntu:$OS_CODE 1>/dev/null
 install:
-- travis_wait 30 docker build -t autoware -f .travis_cfg/01_init/Dockerfile.init.$OS_CODE
+- docker build -t autoware -f .travis_cfg/01_init/Dockerfile.init.$OS_CODE
   --no-cache --build-arg FROM_FILE="ubuntu:$OS_CODE" .
-- travis_wait 30 docker build -t autoware -f .travis_cfg/02_common/Dockerfile.common
+- docker build -t autoware -f .travis_cfg/02_common/Dockerfile.common
   --no-cache --build-arg FROM_FILE="autoware" --build-arg ROS_DISTRO="$ROS_DISTRO"
   --build-arg CUDA_VER="$CUDA_VER" --build-arg OS_VER="$OS_VER" .
-- travis_wait 30 docker build -t autoware -f .travis_cfg/03_rosdeps/Dockerfile.rosdeps.$ROS_DISTRO
+- docker build -t autoware -f .travis_cfg/03_rosdeps/Dockerfile.rosdeps.$ROS_DISTRO
   --no-cache --build-arg FROM_FILE="autoware" .
-- travis_wait 30 docker build -t autoware -f .travis_cfg/04_otherdeps/Dockerfile.otherdeps.$OS_CODE
+- docker build -t autoware -f .travis_cfg/04_otherdeps/Dockerfile.otherdeps.$OS_CODE
   --no-cache --build-arg FROM_FILE="autoware" .
-- travis_wait 120 docker build -t autoware -f .travis_cfg/05_autoware/Dockerfile.autoware
+- docker build -t autoware -f .travis_cfg/05_autoware/Dockerfile.autoware
   --no-cache --build-arg FROM_FILE="autoware" --build-arg GIT_BRANCH="$GIT_BRANCH"
-  --build-arg ROS_DISTRO="$ROS_DISTRO" .
+  --build-arg ROS_DISTRO="$ROS_DISTRO" --build-arg CUDA_VER="$CUDA_VER" 
+  --build-arg CORE_NUMBER="$CORE_NUMBER".
 notifications:
   email: false
   slack:

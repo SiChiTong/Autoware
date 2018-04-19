@@ -16,7 +16,7 @@ index cfca33e..d1a4a13 100644
  
  # CUDA directory contains bin/ and lib/ directories that we need.
 -CUDA_DIR := /usr/local/cuda
-+CUDA_DIR := /usr/local/cuda-8.0
++CUDA_DIR := /usr/local/cuda-$(CUDA_VAR)
  # On Ubuntu 14.04, if cuda tools are installed via
  # "sudo apt-get install nvidia-cuda-toolkit" then use this instead:
  # CUDA_DIR := /usr
@@ -56,8 +56,8 @@ index cfca33e..d1a4a13 100644
  # Whatever else you find you need goes here.
 -INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/local/include
 -LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib
-+INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/local/include /usr/include/hdf5/serial /opt/ros/kinetic/include/opencv-3.2.0-dev
-+LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib /opt/ros/kinetic/lib
++INCLUDE_DIRS := $(PYTHON_INCLUDE) /usr/local/include /usr/include/hdf5/serial /usr/include /opt/ros/$(ROS_DISTRO)/include/$(OPENCV_DEV)
++LIBRARY_DIRS := $(PYTHON_LIB) /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu /opt/ros/$(ROS_DISTRO)/lib
  
  # If Homebrew is installed at a non standard location (for example your home directory) and you use it for general dependencies
  # INCLUDE_DIRS += $(shell brew --prefix)/include
