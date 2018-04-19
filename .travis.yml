@@ -34,7 +34,7 @@ install:
 - docker build -t autoware -f .travis_cfg/05_autoware/Dockerfile.autoware
   --no-cache --build-arg FROM_FILE="autoware" --build-arg GIT_BRANCH="$GIT_BRANCH"
   --build-arg ROS_DISTRO="$ROS_DISTRO" --build-arg CUDA_VER="$CUDA_VER" 
-  --build-arg CORE_NUMBER="$CORE_NUMBER".
+  --build-arg CORE_NUMBER="$CORE_NUMBER" .
 notifications:
   email: false
   slack:
