@@ -17,8 +17,10 @@ RUN mv ~/caffe ~/ssdcaffe && cd ~/ssdcaffe && git checkout ssd
 RUN cp -r /home/$USERNAME/Autoware/.travis_cfg/ssdcaffe_patch ./ssdcaffe.patch
 RUN patch -p 1 < ssdcaffe_patch/ssdcaffe.patch
 RUN patch -p 1 < ssdcaffe_patch/docs.patch
-RUN cp Makefile.config.example Makefile.config
+RUN cp Makefile.config.example Makefile.config.example.back
 RUN patch -p 1 < ssdcaffe_patch/Makefile_config.patch
+RUN mv Makefile.config.example Makefile.config
+RUN mv Makefile.config.example.back Makefile.config.example
 RUN make clean
 RUN make -j 2
 RUN make distribute
