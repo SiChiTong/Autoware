@@ -17,7 +17,7 @@ RUN cd && git clone --depth=1 --branch=$GIT_BRANCH https://github.com/CPFL/Autow
 RUN cd && git clone https://github.com/weiliu89/caffe.git ~/ssdcaffe
 RUN cd ~/ssdcaffe && git checkout ssd
 RUN cd && sudo chmod a+rw -R ~/ssdcaffe && cd ~/ssdcaffe
-RUN sudo chmod a+rw ~/Autoware/.travis_cfg/ssdcaffe_patch
+RUN sudo chmod a+rw -R ~/Autoware/.travis_cfg/ssdcaffe_patch
 RUN cp -r ~/Autoware/.travis_cfg/ssdcaffe_patch ./ssdcaffe_patch
 RUN patch -p 1 < ssdcaffe_patch/ssdcaffe.patch
 RUN patch -p 1 < ssdcaffe_patch/docs.patch
